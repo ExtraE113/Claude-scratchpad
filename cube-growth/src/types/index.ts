@@ -61,6 +61,21 @@ export interface CubeGraph {
 }
 
 /**
+ * A single contribution to a recommendation's score.
+ * Tracks how a specific cube card contributed to the recommendation.
+ */
+export interface ScoreContribution {
+  /** Name of the cube card that contributed this score */
+  cardName: string;
+  /** The raw lift score from EDHREC for this pairing */
+  lift: number;
+  /** Weight applied based on graph distance (1-10) */
+  weight: number;
+  /** Final contribution: lift * weight */
+  contribution: number;
+}
+
+/**
  * A recommendation returned by the recommender system.
  */
 export interface Recommendation {
@@ -72,6 +87,8 @@ export interface Recommendation {
   reason?: string;
   /** True if the card already exists in the cube graph */
   alreadyInGraph: boolean;
+  /** Breakdown of how each cube card contributed to the score */
+  contributions?: ScoreContribution[];
 }
 
 /**

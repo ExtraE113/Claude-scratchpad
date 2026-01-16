@@ -5,9 +5,9 @@
  * to add cards to the cube and create connections.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useCube } from '../../context/CubeContext';
-import type { Recommendation } from '../../types';
+import type { Recommendation, ScoreContribution } from '../../types';
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
@@ -186,6 +186,68 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '4px',
     fontWeight: '500',
   },
+  toggleContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '12px',
+    padding: '8px 12px',
+    backgroundColor: '#f3f4f6',
+    borderRadius: '6px',
+  },
+  toggleLabel: {
+    fontSize: '13px',
+    color: '#374151',
+    cursor: 'pointer',
+    userSelect: 'none',
+  },
+  checkbox: {
+    width: '16px',
+    height: '16px',
+    cursor: 'pointer',
+  },
+  contributions: {
+    marginTop: '8px',
+    padding: '8px',
+    backgroundColor: '#f0f9ff',
+    borderRadius: '6px',
+    border: '1px solid #bae6fd',
+  },
+  contributionsTitle: {
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#0369a1',
+    marginBottom: '6px',
+  },
+  contributionRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    fontSize: '11px',
+    color: '#475569',
+    padding: '3px 0',
+    borderBottom: '1px solid #e0f2fe',
+  },
+  contributionCard: {
+    fontWeight: '500',
+    color: '#0c4a6e',
+    maxWidth: '120px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  contributionCalc: {
+    display: 'flex',
+    gap: '4px',
+    alignItems: 'center',
+    color: '#64748b',
+    fontFamily: 'monospace',
+    fontSize: '10px',
+  },
+  contributionValue: {
+    fontWeight: '600',
+    color: '#0369a1',
+  },
 };
 
 // Inline keyframes for spinner animation
@@ -195,8 +257,46 @@ const spinnerKeyframes = `
   }
 `;
 
+interface ContributionsBreakdownProps {
+  contributions: ScoreContribution[];
+}
+
+function ContributionsBreakdown({ contributions }: ContributionsBreakdownProps) {
+  // Show top 5 contributions
+  const topContributions = contributions.slice(0, 5);
+  const hasMore = contributions.length > 5;
+
+  return (
+    <div style={styles.contributions}>
+      <div style={styles.contributionsTitle}>
+        Score Breakdown ({contributions.length} source{contributions.length !== 1 ? 's' : ''})
+      </div>
+      {topContributions.map((c, idx) => (
+        <div key={idx} style={styles.contributionRow}>
+          <span style={styles.contributionCard} title={c.cardName}>
+            {c.cardName}
+          </span>
+          <span style={styles.contributionCalc}>
+            <span>{c.lift.toFixed(1)}</span>
+            <span>×</span>
+            <span>{c.weight}</span>
+            <span>=</span>
+            <span style={styles.contributionValue}>{c.contribution.toFixed(1)}</span>
+          </span>
+        </div>
+      ))}
+      {hasMore && (
+        <div style={{ ...styles.contributionRow, borderBottom: 'none', color: '#94a3b8' }}>
+          ... and {contributions.length - 5} more
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface RecommendationItemProps {
   recommendation: Recommendation;
+  showDetails: boolean;
   onAdd: (recommendation: Recommendation) => void;
   onAddAndConnect: (recommendation: Recommendation) => void;
   onConnect: (recommendation: Recommendation) => void;
@@ -204,11 +304,12 @@ interface RecommendationItemProps {
 
 function RecommendationItem({
   recommendation,
+  showDetails,
   onAdd,
   onAddAndConnect,
   onConnect,
 }: RecommendationItemProps) {
-  const { card, score, alreadyInGraph } = recommendation;
+  const { card, score, alreadyInGraph, contributions } = recommendation;
   const scorePercent = Math.min(100, Math.max(0, score));
 
   return (
@@ -299,6 +400,11 @@ function RecommendationItem({
             </>
           )}
         </div>
+
+        {/* Contributions Breakdown */}
+        {showDetails && contributions && contributions.length > 0 && (
+          <ContributionsBreakdown contributions={contributions} />
+        )}
       </div>
     </div>
   );
@@ -307,6 +413,7 @@ function RecommendationItem({
 export function RecommendationPanel() {
   const { state, dispatch, addCardByName, fetchRecommendationsForSelected } = useCube();
   const { selectedCardId, recommendations, isLoadingRecs, recsError } = state;
+  const [showDetails, setShowDetails] = useState(false);
 
   const handleFetch = async () => {
     await fetchRecommendationsForSelected();
@@ -416,17 +523,34 @@ export function RecommendationPanel() {
 
       {/* Recommendations List */}
       {!isLoadingRecs && recommendations.length > 0 && (
-        <div style={styles.list}>
-          {recommendations.map((rec) => (
-            <RecommendationItem
-              key={rec.card.oracleId}
-              recommendation={rec}
-              onAdd={handleAdd}
-              onAddAndConnect={handleAddAndConnect}
-              onConnect={handleConnect}
+        <>
+          {/* Show Details Toggle */}
+          <div style={styles.toggleContainer}>
+            <input
+              type="checkbox"
+              id="show-details"
+              checked={showDetails}
+              onChange={(e) => setShowDetails(e.target.checked)}
+              style={styles.checkbox}
             />
-          ))}
-        </div>
+            <label htmlFor="show-details" style={styles.toggleLabel}>
+              Show score breakdown
+            </label>
+          </div>
+
+          <div style={styles.list}>
+            {recommendations.map((rec) => (
+              <RecommendationItem
+                key={rec.card.oracleId}
+                recommendation={rec}
+                showDetails={showDetails}
+                onAdd={handleAdd}
+                onAddAndConnect={handleAddAndConnect}
+                onConnect={handleConnect}
+              />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

@@ -15,7 +15,7 @@
  * commander-based recommendation API, providing more relevant results.
  */
 
-import type { Card, CubeGraph, Recommendation } from '../types';
+import type { Card, CubeGraph, Recommendation, ScoreContribution } from '../types';
 import { getCardLiftData, type CardLiftEntry } from './cardLiftCache';
 import { fetchCardsByNames } from './scryfall';
 import { isCommanderOnlyCard } from './commanderFilter';
@@ -53,6 +53,7 @@ interface RawLiftRecommendation {
   name: string;
   aggregatedScore: number;
   contributingCards: number;
+  contributions: ScoreContribution[];
 }
 
 /**
@@ -175,11 +176,12 @@ async function aggregateLiftScores(
 
   // Wait for all fetches and aggregate
   const results = await Promise.all(fetchPromises.map(async (fp) => ({
+    cardName: fp.card.name,
     weight: fp.weight,
     liftData: await fp.promise,
   })));
 
-  for (const { weight, liftData } of results) {
+  for (const { cardName, weight, liftData } of results) {
     for (const entry of liftData) {
       // Skip cards already in the cube
       if (cubeCardNames.has(entry.name.toLowerCase())) {
@@ -191,17 +193,26 @@ async function aggregateLiftScores(
         continue;
       }
 
-      const existing = aggregatedScores.get(entry.name);
       const weightedLift = entry.lift * weight;
+      const contribution: ScoreContribution = {
+        cardName,
+        lift: entry.lift,
+        weight,
+        contribution: weightedLift,
+      };
+
+      const existing = aggregatedScores.get(entry.name);
 
       if (existing) {
         existing.aggregatedScore += weightedLift;
         existing.contributingCards++;
+        existing.contributions.push(contribution);
       } else {
         aggregatedScores.set(entry.name, {
           name: entry.name,
           aggregatedScore: weightedLift,
           contributingCards: 1,
+          contributions: [contribution],
         });
       }
     }
@@ -281,10 +292,15 @@ export async function getLiftRecommendations(
       continue;
     }
 
+    // Sort contributions by contribution value descending
+    const sortedContributions = candidate.contributions
+      .sort((a, b) => b.contribution - a.contribution);
+
     recommendations.push({
       card,
       score: candidate.aggregatedScore,
       alreadyInGraph: false, // These are filtered out, so never already in graph
+      contributions: sortedContributions,
     });
   }
 
