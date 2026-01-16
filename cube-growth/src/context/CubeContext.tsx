@@ -13,11 +13,11 @@ import {
   type Dispatch,
 } from 'react';
 
-import type { Card, CubeGraph } from '../types';
+import type { Card } from '../types';
 import { cubeReducer, createInitialState, type CubeState, type CubeAction, type NotificationType } from './cubeReducer';
-import { getNeighbors, hasCard } from '../lib/graph';
+import { hasCard } from '../lib/graph';
 import { fetchCard } from '../lib/scryfall';
-import { getRecommendations } from '../lib/recommender';
+import { getLiftRecommendations } from '../lib/liftRecommender';
 
 /**
  * Result of adding a card - indicates whether the card was added or was a duplicate.
@@ -41,8 +41,6 @@ interface CubeContextValue {
   addCardByName: (name: string) => Promise<AddCardResult>;
   /** Async helper to fetch recommendations for the selected card */
   fetchRecommendationsForSelected: () => Promise<void>;
-  /** Build context cards for recommendation requests */
-  buildRecommendationContext: (oracleId: string) => Card[];
   /** Helper to show a notification message */
   showNotification: (message: string, type?: NotificationType) => void;
 }
@@ -60,67 +58,10 @@ interface CubeProviderProps {
 }
 
 /**
- * Builds context cards for recommendation requests.
- * Returns up to 20 cards: BFS neighbors first, then random cards from the graph.
- *
- * @param graph - The current cube graph
- * @param oracleId - The oracle ID of the source card
- * @returns Array of up to 20 context cards
- */
-function buildContextCards(graph: CubeGraph, oracleId: string): Card[] {
-  const MAX_CONTEXT_SIZE = 20;
-
-  // Get BFS neighbors first (up to 20)
-  const neighbors = getNeighbors(graph, oracleId, MAX_CONTEXT_SIZE);
-
-  // If we have enough from BFS, return early
-  if (neighbors.length >= MAX_CONTEXT_SIZE) {
-    return neighbors;
-  }
-
-  // Build set of oracle IDs we already have
-  const includedIds = new Set<string>([
-    oracleId,
-    ...neighbors.map((c) => c.oracleId),
-  ]);
-
-  // Get remaining cards from the graph (excluding source and neighbors)
-  const remainingCards: Card[] = [];
-  for (const card of graph.nodes.values()) {
-    if (!includedIds.has(card.oracleId)) {
-      remainingCards.push(card);
-    }
-  }
-
-  // Shuffle remaining cards using Fisher-Yates
-  for (let i = remainingCards.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [remainingCards[i], remainingCards[j]] = [remainingCards[j], remainingCards[i]];
-  }
-
-  // Take enough random cards to fill up to MAX_CONTEXT_SIZE
-  const needed = MAX_CONTEXT_SIZE - neighbors.length;
-  const randomCards = remainingCards.slice(0, needed);
-
-  return [...neighbors, ...randomCards];
-}
-
-/**
  * Provider component that wraps the application with cube state.
  */
 export function CubeProvider({ children }: CubeProviderProps) {
   const [state, dispatch] = useReducer(cubeReducer, undefined, createInitialState);
-
-  /**
-   * Build context cards for a given oracle ID.
-   * Exposed for components that need to inspect the context.
-   */
-  const buildRecommendationContext = useCallback(
-    (oracleId: string): Card[] => {
-      return buildContextCards(state.graph, oracleId);
-    },
-    [state.graph]
-  );
 
   /**
    * Helper to show a notification message.
@@ -169,7 +110,7 @@ export function CubeProvider({ children }: CubeProviderProps) {
 
   /**
    * Async helper to fetch recommendations for the currently selected card.
-   * Updates loading state and handles errors appropriately.
+   * Uses lift-based recommendation aggregating synergy data from all cube cards.
    */
   const fetchRecommendationsForSelected = useCallback(async (): Promise<void> => {
     const { selectedCardId, graph } = state;
@@ -197,9 +138,8 @@ export function CubeProvider({ children }: CubeProviderProps) {
     dispatch({ type: 'SET_LOADING_RECS', payload: true });
 
     try {
-      // Build context and fetch recommendations
-      const contextCards = buildContextCards(graph, selectedCardId);
-      const recommendations = await getRecommendations(selectedCard, contextCards);
+      // Fetch recommendations using lift-based aggregation
+      const recommendations = await getLiftRecommendations(selectedCard, graph);
 
       // Update recommendations in state
       dispatch({ type: 'SET_RECOMMENDATIONS', payload: recommendations });
@@ -220,10 +160,9 @@ export function CubeProvider({ children }: CubeProviderProps) {
       dispatch,
       addCardByName,
       fetchRecommendationsForSelected,
-      buildRecommendationContext,
       showNotification,
     }),
-    [state, dispatch, addCardByName, fetchRecommendationsForSelected, buildRecommendationContext, showNotification]
+    [state, dispatch, addCardByName, fetchRecommendationsForSelected, showNotification]
   );
 
   return <CubeContext.Provider value={contextValue}>{children}</CubeContext.Provider>;

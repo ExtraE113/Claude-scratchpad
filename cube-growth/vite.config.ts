@@ -11,6 +11,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/edhrec/, '/api'),
       },
+      '/json/edhrec': {
+        target: 'https://json.edhrec.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/json\/edhrec/, ''),
+      },
     },
   },
 })
