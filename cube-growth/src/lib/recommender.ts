@@ -3,15 +3,13 @@
  *
  * Provides card recommendations using the EDHREC API.
  * Uses Kenrith, the Returned King as a neutral 5-color commander.
- * Cards are weighted using Personalized PageRank for better relevance.
  * Baseline scores (Kenrith + 0 cards) are subtracted to filter out
  * generic 5-color goodstuff and highlight context-specific synergies.
  */
 
-import type { Card, CubeGraph, Recommendation } from '../types';
+import type { Card, Recommendation } from '../types';
 import { fetchCardsByNames } from './scryfall';
 import { isCommanderOnlyCard } from './commanderFilter';
-import { calculatePPRWeights, buildWeightedCardNames } from './pprWeights';
 import { getBaselineCache } from './baselineCache';
 
 /**
@@ -19,12 +17,6 @@ import { getBaselineCache } from './baselineCache';
  * Kenrith is a 5-color commander that doesn't restrict color identity.
  */
 const DEFAULT_COMMANDER = 'Kenrith, the Returned King';
-
-/**
- * Maximum number of card name entries in the EDHREC request.
- * Higher weights mean more repetitions, so we cap to avoid huge requests.
- */
-const MAX_CARD_ENTRIES = 100;
 
 /**
  * Number of pages to fetch for recommendations.
@@ -116,31 +108,19 @@ async function fetchRecommendationPage(
 
 /**
  * Get card recommendations from EDHREC based on a source card and context.
- * Uses Personalized PageRank to weight cards by their importance relative
- * to the source card. Subtracts baseline scores (Kenrith + 0 cards) to
- * filter out generic goodstuff and highlight context-specific synergies.
+ * Subtracts baseline scores (Kenrith + 0 cards) to filter out generic
+ * goodstuff and highlight context-specific synergies.
  *
  * @param sourceCard - The card to get recommendations for
  * @param context - Array of context cards (neighbors in the graph)
- * @param graph - The full cube graph (used for PPR calculation)
  * @returns Array of up to 10 recommendations, filtered for commander-only cards
  */
 export async function getRecommendations(
   sourceCard: Card,
-  context: Card[],
-  graph: CubeGraph
+  context: Card[]
 ): Promise<Recommendation[]> {
-  // Calculate PPR weights for all cards relative to the source
-  const weights = calculatePPRWeights(graph, sourceCard.oracleId);
-
-  // Build card name tuples for weighted expansion
-  const cardNameTuples: Array<[string, string]> = [
-    [sourceCard.oracleId, sourceCard.name],
-    ...context.map((c): [string, string] => [c.oracleId, c.name]),
-  ];
-
-  // Build weighted card names (higher weight = more repetitions)
-  const cardNames = buildWeightedCardNames(cardNameTuples, weights, MAX_CARD_ENTRIES);
+  // Build unique card names list for EDHREC request
+  const cardNames = [sourceCard.name, ...context.map((c) => c.name)];
 
   // Get the baseline cache for score adjustment
   const baselineCache = await getBaselineCache();
