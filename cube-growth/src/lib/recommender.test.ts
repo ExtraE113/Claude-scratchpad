@@ -6,17 +6,34 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getRecommendations } from './recommender';
 import type { Card, CubeGraph } from '../types';
 import { createGraph, addCard, addConnection } from './graph';
+import { clearBaselineCache } from './baselineCache';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
 
+/**
+ * Helper to set up baseline cache mock response.
+ * The baseline cache is fetched once and then cached.
+ */
+function mockBaselineResponse(cards: Array<{ name: string; score: number }> = []) {
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({
+      inRecs: cards,
+      more: false,
+    }),
+  });
+}
+
 beforeEach(() => {
   vi.stubGlobal('fetch', mockFetch);
   mockFetch.mockReset();
+  clearBaselineCache();
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  clearBaselineCache();
 });
 
 // Helper to create mock Card objects
@@ -81,6 +98,9 @@ describe('getRecommendations', () => {
       more: false,
     };
 
+    // First: baseline cache fetch (empty baseline)
+    mockBaselineResponse([]);
+
     mockFetch
       // EDHREC API call
       .mockResolvedValueOnce({
@@ -102,6 +122,7 @@ describe('getRecommendations', () => {
 
     expect(recommendations).toHaveLength(2);
     expect(recommendations[0].card.name).toBe('Rift Bolt');
+    // Score is raw score - baseline (85 - 0 = 85)
     expect(recommendations[0].score).toBe(85);
     expect(recommendations[1].card.name).toBe('Lava Spike');
     expect(recommendations[1].score).toBe(80);
@@ -119,6 +140,8 @@ describe('getRecommendations', () => {
       outRecs: [],
       more: false,
     };
+
+    mockBaselineResponse([]);
 
     mockFetch
       .mockResolvedValueOnce({
@@ -149,6 +172,8 @@ describe('getRecommendations', () => {
       outRecs: [],
       more: false,
     };
+
+    mockBaselineResponse([]);
 
     mockFetch
       .mockResolvedValueOnce({
@@ -192,6 +217,8 @@ describe('getRecommendations', () => {
       outRecs: [],
       more: false,
     };
+
+    mockBaselineResponse([]);
 
     mockFetch
       .mockResolvedValueOnce({
@@ -238,9 +265,20 @@ describe('getRecommendations', () => {
       more: true,
     };
 
+    mockBaselineResponse([]);
+
+    // EDHREC pages (fetches 3 pages due to more=true)
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => edhrecResponse,
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ inRecs: [], outRecs: [], more: true }),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ inRecs: [], outRecs: [], more: false }),
     });
 
     // Mock Scryfall responses for all 15 cards (but only 10 should be processed)
@@ -258,8 +296,13 @@ describe('getRecommendations', () => {
     expect(recommendations[9].card.name).toBe('Card 10');
   });
 
-  it('handles EDHREC API errors', async () => {
+  it('handles EDHREC API errors gracefully by returning empty recommendations', async () => {
     const graph = createMockGraph([sourceCard]);
+
+    // Suppress console.warn for this test
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    mockBaselineResponse([]);
 
     mockFetch.mockResolvedValueOnce({
       ok: false,
@@ -267,17 +310,30 @@ describe('getRecommendations', () => {
       statusText: 'Internal Server Error',
     });
 
-    await expect(getRecommendations(sourceCard, [], graph)).rejects.toThrow(
-      'EDHREC request failed: 500 Internal Server Error'
-    );
+    // Should return empty recommendations, not throw (graceful degradation)
+    const recommendations = await getRecommendations(sourceCard, [], graph);
+    expect(recommendations).toHaveLength(0);
+    expect(warnSpy).toHaveBeenCalled();
+
+    warnSpy.mockRestore();
   });
 
-  it('handles network errors', async () => {
+  it('handles network errors gracefully by returning empty recommendations', async () => {
     const graph = createMockGraph([sourceCard]);
+
+    // Suppress console.warn for this test
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    mockBaselineResponse([]);
 
     mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
-    await expect(getRecommendations(sourceCard, [], graph)).rejects.toThrow('Network error');
+    // Should return empty recommendations, not throw (graceful degradation)
+    const recommendations = await getRecommendations(sourceCard, [], graph);
+    expect(recommendations).toHaveLength(0);
+    expect(warnSpy).toHaveBeenCalled();
+
+    warnSpy.mockRestore();
   });
 
   it('skips cards that fail to fetch from Scryfall', async () => {
@@ -294,6 +350,8 @@ describe('getRecommendations', () => {
 
     // Suppress console.warn for this test
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    mockBaselineResponse([]);
 
     mockFetch
       .mockResolvedValueOnce({
@@ -332,6 +390,8 @@ describe('getRecommendations', () => {
       outRecs: [],
       more: false,
     };
+
+    mockBaselineResponse([]);
 
     mockFetch
       .mockResolvedValueOnce({
@@ -381,6 +441,8 @@ describe('getRecommendations', () => {
       more: false,
     };
 
+    mockBaselineResponse([]);
+
     mockFetch
       .mockResolvedValueOnce({
         ok: true,
@@ -426,6 +488,8 @@ describe('getRecommendations', () => {
       more: false,
     };
 
+    mockBaselineResponse([]);
+
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => edhrecResponse,
@@ -433,7 +497,7 @@ describe('getRecommendations', () => {
 
     await getRecommendations(sourceCard, [contextCard], graph);
 
-    // Check that fetch was called with weighted card names
+    // The second call should be the EDHREC recommendation call (first is baseline)
     expect(mockFetch).toHaveBeenCalledWith('/api/edhrec/recs', expect.objectContaining({
       method: 'POST',
       headers: {
@@ -441,8 +505,8 @@ describe('getRecommendations', () => {
       },
     }));
 
-    // Parse the body to check the cards array
-    const callArgs = mockFetch.mock.calls[0];
+    // Parse the body to check the cards array (second call, index 1)
+    const callArgs = mockFetch.mock.calls[1];
     const body = JSON.parse(callArgs[1].body);
 
     // Source card should appear multiple times (weight 10)
@@ -468,6 +532,8 @@ describe('getRecommendations', () => {
       more: false,
     };
 
+    mockBaselineResponse([]);
+
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => edhrecResponse,
@@ -477,5 +543,85 @@ describe('getRecommendations', () => {
 
     // Should only process inRecs, not outRecs
     expect(recommendations).toHaveLength(0);
+  });
+
+  it('subtracts baseline scores and reorders by adjusted score', async () => {
+    const graph = createMockGraph([sourceCard]);
+
+    const edhrecResponse = {
+      inRecs: [
+        // Sol Ring has high raw score but high baseline too
+        { name: 'Sol Ring', oracle_id: 'sol-id', primary_type: 'Artifact', score: 100, salt: 0 },
+        // Synergy Card has lower raw score but zero baseline
+        { name: 'Synergy Card', oracle_id: 'syn-id', primary_type: 'Creature', score: 60, salt: 0 },
+      ],
+      outRecs: [],
+      more: false,
+    };
+
+    // Baseline has Sol Ring with score 90
+    mockBaselineResponse([
+      { name: 'Sol Ring', score: 90 },
+    ]);
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => edhrecResponse,
+      })
+      // Synergy Card should be fetched first (higher adjusted score: 60 - 0 = 60)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => createMockScryfallResponse('Synergy Card', 'synergy-oracle-id'),
+      })
+      // Sol Ring (lower adjusted score: 100 - 90 = 10)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => createMockScryfallResponse('Sol Ring', 'sol-oracle-id'),
+      });
+
+    const recommendations = await getRecommendations(sourceCard, [], graph);
+
+    expect(recommendations).toHaveLength(2);
+    // Synergy Card should be first (adjusted score 60 > 10)
+    expect(recommendations[0].card.name).toBe('Synergy Card');
+    expect(recommendations[0].score).toBe(60);
+    // Sol Ring should be second (adjusted score 10)
+    expect(recommendations[1].card.name).toBe('Sol Ring');
+    expect(recommendations[1].score).toBe(10);
+  });
+
+  it('handles negative adjusted scores', async () => {
+    const graph = createMockGraph([sourceCard]);
+
+    const edhrecResponse = {
+      inRecs: [
+        // Card with very high baseline (generic goodstuff)
+        { name: 'Generic Card', oracle_id: 'gen-id', primary_type: 'Artifact', score: 50, salt: 0 },
+      ],
+      outRecs: [],
+      more: false,
+    };
+
+    // Baseline has Generic Card with score higher than raw
+    mockBaselineResponse([
+      { name: 'Generic Card', score: 80 },
+    ]);
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => edhrecResponse,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => createMockScryfallResponse('Generic Card', 'generic-oracle-id'),
+      });
+
+    const recommendations = await getRecommendations(sourceCard, [], graph);
+
+    expect(recommendations).toHaveLength(1);
+    // Adjusted score should be negative (50 - 80 = -30)
+    expect(recommendations[0].score).toBe(-30);
   });
 });
