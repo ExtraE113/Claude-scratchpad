@@ -37,21 +37,26 @@ function createMockCard(name: string, oracleId: string, oracleText = ''): Card {
   };
 }
 
-// Helper to create a mock EDHREC card JSON response
+// Helper to create a mock EDHREC card JSON response (matches real nested structure)
 function createMockEDHRECResponse(cards: Array<{ name: string; lift: number; synergy?: number }>) {
   return {
-    cardlists: [
-      {
-        tag: 'highliftcards',
-        cardviews: cards.map((c) => ({
-          name: c.name,
-          sanitized: c.name.toLowerCase().replace(/\s/g, '-'),
-          lift: c.lift,
-          synergy: c.synergy ?? 0.5,
-          inclusion: 1000,
-        })),
+    container: {
+      json_dict: {
+        cardlists: [
+          {
+            tag: 'highliftcards',
+            header: 'High Lift Cards',
+            cardviews: cards.map((c) => ({
+              name: c.name,
+              sanitized: c.name.toLowerCase().replace(/\s/g, '-'),
+              lift: c.lift,
+              synergy: c.synergy ?? 0.5,
+              inclusion: 1000,
+            })),
+          },
+        ],
       },
-    ],
+    },
   };
 }
 

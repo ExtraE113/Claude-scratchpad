@@ -17,17 +17,29 @@ const MAX_LIFT_CARDS = 100;
 /**
  * EDHREC card page JSON response type (subset of fields we need)
  */
+interface EDHRECCardView {
+  name: string;
+  sanitized?: string;
+  synergy?: number;
+  lift?: number;
+  inclusion?: number;
+}
+
+interface EDHRECCardList {
+  tag?: string;
+  header?: string;
+  cardviews?: EDHRECCardView[];
+}
+
 interface EDHRECCardResponse {
-  cardlists?: Array<{
-    tag?: string;
-    cardviews?: Array<{
-      name: string;
-      sanitized?: string;
-      synergy?: number;
-      lift?: number;
-      inclusion?: number;
-    }>;
-  }>;
+  // New structure: cardlists is nested in container.json_dict
+  container?: {
+    json_dict?: {
+      cardlists?: EDHRECCardList[];
+    };
+  };
+  // Old/alternative structure: cardlists at top level
+  cardlists?: EDHRECCardList[];
 }
 
 /**
@@ -74,8 +86,12 @@ async function fetchCardLiftData(cardName: string): Promise<CardLiftEntry[]> {
   const sanitized = sanitizeCardName(cardName);
   const url = `/json/edhrec/pages/cards/${sanitized}.json`;
 
+  console.log(`[CardLiftCache] Fetching: ${url}`);
+
   try {
     const response = await fetch(url);
+
+    console.log(`[CardLiftCache] Response status for "${cardName}": ${response.status}`);
 
     if (!response.ok) {
       console.warn(`[CardLiftCache] Failed to fetch lift data for "${cardName}": ${response.status}`);
@@ -84,12 +100,23 @@ async function fetchCardLiftData(cardName: string): Promise<CardLiftEntry[]> {
 
     const data: EDHRECCardResponse = await response.json();
 
+    // Handle both nested (container.json_dict.cardlists) and flat (cardlists) structures
+    const cardlists = data.container?.json_dict?.cardlists ?? data.cardlists ?? [];
+
+    console.log(`[CardLiftCache] Response keys for "${cardName}":`, Object.keys(data));
+    console.log(`[CardLiftCache] Cardlists found: ${cardlists.length}`);
+    if (cardlists.length > 0) {
+      for (const cl of cardlists.slice(0, 3)) {
+        console.log(`[CardLiftCache] Cardlist: "${cl.header || cl.tag}", cardviews: ${cl.cardviews?.length ?? 0}`);
+      }
+    }
+
     // Collect all cards with lift data from all cardlists
     const liftEntries: CardLiftEntry[] = [];
     const seenNames = new Set<string>();
 
-    if (data.cardlists) {
-      for (const cardlist of data.cardlists) {
+    if (cardlists.length > 0) {
+      for (const cardlist of cardlists) {
         if (!cardlist.cardviews) continue;
 
         for (const card of cardlist.cardviews) {

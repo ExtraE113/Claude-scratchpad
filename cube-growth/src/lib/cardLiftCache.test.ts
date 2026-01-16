@@ -25,20 +25,25 @@ afterEach(() => {
   clearCardLiftCache();
 });
 
-// Helper to create mock EDHREC response
+// Helper to create mock EDHREC response (matches real nested structure)
 function createMockResponse(cards: Array<{ name: string; lift: number; synergy?: number }>) {
   return {
-    cardlists: [
-      {
-        tag: 'highliftcards',
-        cardviews: cards.map((c) => ({
-          name: c.name,
-          sanitized: c.name.toLowerCase().replace(/\s/g, '-'),
-          lift: c.lift,
-          synergy: c.synergy ?? 0.5,
-        })),
+    container: {
+      json_dict: {
+        cardlists: [
+          {
+            tag: 'highliftcards',
+            header: 'High Lift Cards',
+            cardviews: cards.map((c) => ({
+              name: c.name,
+              sanitized: c.name.toLowerCase().replace(/\s/g, '-'),
+              lift: c.lift,
+              synergy: c.synergy ?? 0.5,
+            })),
+          },
+        ],
       },
-    ],
+    },
   };
 }
 
@@ -207,16 +212,20 @@ describe('cardLiftCache', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          cardlists: [
-            {
-              tag: 'creatures',
-              cardviews: [{ name: 'Card A', lift: 100, synergy: 0.5 }],
+          container: {
+            json_dict: {
+              cardlists: [
+                {
+                  tag: 'creatures',
+                  cardviews: [{ name: 'Card A', lift: 100, synergy: 0.5 }],
+                },
+                {
+                  tag: 'artifacts',
+                  cardviews: [{ name: 'Card A', lift: 80, synergy: 0.4 }],
+                },
+              ],
             },
-            {
-              tag: 'artifacts',
-              cardviews: [{ name: 'Card A', lift: 80, synergy: 0.4 }],
-            },
-          ],
+          },
         }),
       });
 
@@ -231,7 +240,7 @@ describe('cardLiftCache', () => {
     it('handles empty cardlists', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ cardlists: [] }),
+        json: async () => ({ container: { json_dict: { cardlists: [] } } }),
       });
 
       const result = await getCardLiftData('Blood Moon');
