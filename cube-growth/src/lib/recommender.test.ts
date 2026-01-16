@@ -34,8 +34,8 @@ function createMockCard(name: string, oracleId: string, oracleText = ''): Card {
   };
 }
 
-// Helper to create a mock Scryfall response
-function createMockScryfallResponse(name: string, oracleId: string, oracleText = '') {
+// Helper to create a mock Scryfall card object (for collection response)
+function createMockScryfallCard(name: string, oracleId: string, oracleText = '') {
   return {
     oracle_id: oracleId,
     name,
@@ -49,6 +49,15 @@ function createMockScryfallResponse(name: string, oracleId: string, oracleText =
     color_identity: ['R'],
     type_line: 'Instant',
     oracle_text: oracleText,
+  };
+}
+
+// Helper to create a mock Scryfall collection response
+function createMockCollectionResponse(cards: Array<{ name: string; oracleId: string; oracleText?: string }>, notFoundNames: string[] = []) {
+  return {
+    object: 'list',
+    data: cards.map(c => createMockScryfallCard(c.name, c.oracleId, c.oracleText ?? '')),
+    not_found: notFoundNames.map(name => ({ name })),
   };
 }
 
@@ -72,15 +81,13 @@ describe('getRecommendations', () => {
         ok: true,
         json: async () => edhrecResponse,
       })
-      // Scryfall fetch for Rift Bolt
+      // Scryfall batch fetch for both cards
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => createMockScryfallResponse('Rift Bolt', 'rift-bolt-id', 'Suspend 1'),
-      })
-      // Scryfall fetch for Lava Spike
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => createMockScryfallResponse('Lava Spike', 'lava-spike-id', 'Deal 3 damage'),
+        json: async () => createMockCollectionResponse([
+          { name: 'Rift Bolt', oracleId: 'rift-bolt-id', oracleText: 'Suspend 1' },
+          { name: 'Lava Spike', oracleId: 'lava-spike-id', oracleText: 'Deal 3 damage' },
+        ]),
       });
 
     const recommendations = await getRecommendations(sourceCard, [contextCard]);
@@ -108,10 +115,12 @@ describe('getRecommendations', () => {
         ok: true,
         json: async () => edhrecResponse,
       })
-      // Only Lightning Greaves should be fetched (others filtered by name)
+      // Only Lightning Greaves should be fetched (others filtered by name before batch fetch)
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => createMockScryfallResponse('Lightning Greaves', 'lg-oracle-id', 'Shroud, Haste'),
+        json: async () => createMockCollectionResponse([
+          { name: 'Lightning Greaves', oracleId: 'lg-oracle-id', oracleText: 'Shroud, Haste' },
+        ]),
       });
 
     const recommendations = await getRecommendations(sourceCard, []);
@@ -136,23 +145,13 @@ describe('getRecommendations', () => {
         ok: true,
         json: async () => edhrecResponse,
       })
-      // Custom Commander Card - has commander text
+      // Batch fetch both cards - filtering happens after oracle text is retrieved
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => createMockScryfallResponse(
-          'Custom Commander Card',
-          'custom-oracle-id',
-          'If you control your commander, this creature gets +2/+2.'
-        ),
-      })
-      // Normal Card - no commander text
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => createMockScryfallResponse(
-          'Normal Card',
-          'normal-oracle-id',
-          'Flying, vigilance'
-        ),
+        json: async () => createMockCollectionResponse([
+          { name: 'Custom Commander Card', oracleId: 'custom-oracle-id', oracleText: 'If you control your commander, this creature gets +2/+2.' },
+          { name: 'Normal Card', oracleId: 'normal-oracle-id', oracleText: 'Flying, vigilance' },
+        ]),
       });
 
     const recommendations = await getRecommendations(sourceCard, []);
@@ -177,21 +176,13 @@ describe('getRecommendations', () => {
         ok: true,
         json: async () => edhrecResponse,
       })
+      // Batch fetch both cards
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => createMockScryfallResponse(
-          'Zone Card',
-          'zone-oracle-id',
-          'You may cast this spell from your command zone.'
-        ),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => createMockScryfallResponse(
-          'Regular Card',
-          'regular-oracle-id',
-          'When this enters the battlefield, draw a card.'
-        ),
+        json: async () => createMockCollectionResponse([
+          { name: 'Zone Card', oracleId: 'zone-oracle-id', oracleText: 'You may cast this spell from your command zone.' },
+          { name: 'Regular Card', oracleId: 'regular-oracle-id', oracleText: 'When this enters the battlefield, draw a card.' },
+        ]),
       });
 
     const recommendations = await getRecommendations(sourceCard, []);
@@ -215,18 +206,22 @@ describe('getRecommendations', () => {
       more: true,
     };
 
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => edhrecResponse,
-    });
+    // Create mock cards for the batch response (we fetch up to 25 cards to have buffer)
+    const mockCards = Array.from({ length: 25 }, (_, i) => ({
+      name: `Card ${i + 1}`,
+      oracleId: `card-${i + 1}-oracle`,
+    }));
 
-    // Mock Scryfall responses for all 15 cards (but only 10 should be processed)
-    for (let i = 0; i < 15; i++) {
-      mockFetch.mockResolvedValueOnce({
+    mockFetch
+      .mockResolvedValueOnce({
         ok: true,
-        json: async () => createMockScryfallResponse(`Card ${i + 1}`, `card-${i + 1}-oracle`),
+        json: async () => edhrecResponse,
+      })
+      // Single batch fetch for all cards
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => createMockCollectionResponse(mockCards),
       });
-    }
 
     const recommendations = await getRecommendations(sourceCard, []);
 
@@ -271,16 +266,13 @@ describe('getRecommendations', () => {
         ok: true,
         json: async () => edhrecResponse,
       })
-      // Failing Card - 404 error
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-      })
-      // Working Card - success
+      // Batch fetch - Failing Card is in not_found, Working Card succeeds
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => createMockScryfallResponse('Working Card', 'working-oracle-id'),
+        json: async () => createMockCollectionResponse(
+          [{ name: 'Working Card', oracleId: 'working-oracle-id' }],
+          ['Failing Card']
+        ),
       });
 
     const recommendations = await getRecommendations(sourceCard, []);
@@ -307,25 +299,13 @@ describe('getRecommendations', () => {
         ok: true,
         json: async () => edhrecResponse,
       })
-      // Lightning Bolt (same as source)
+      // Batch fetch both cards
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          oracle_id: 'source-oracle-id',
-          name: 'Lightning Bolt',
-          image_uris: { normal: 'url', art_crop: 'url' },
-          mana_cost: '{R}',
-          cmc: 1,
-          colors: ['R'],
-          color_identity: ['R'],
-          type_line: 'Instant',
-          oracle_text: 'Deal 3 damage',
-        }),
-      })
-      // New Card
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => createMockScryfallResponse('New Card', 'new-oracle-id'),
+        json: async () => createMockCollectionResponse([
+          { name: 'Lightning Bolt', oracleId: 'source-oracle-id', oracleText: 'Deal 3 damage' },
+          { name: 'New Card', oracleId: 'new-oracle-id' },
+        ]),
       });
 
     const recommendations = await getRecommendations(sourceCard, []);
@@ -353,25 +333,13 @@ describe('getRecommendations', () => {
         ok: true,
         json: async () => edhrecResponse,
       })
-      // Chain Lightning (in context)
+      // Batch fetch both cards
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          oracle_id: 'context-oracle-id',
-          name: 'Chain Lightning',
-          image_uris: { normal: 'url', art_crop: 'url' },
-          mana_cost: '{R}',
-          cmc: 1,
-          colors: ['R'],
-          color_identity: ['R'],
-          type_line: 'Sorcery',
-          oracle_text: 'Deal 3 damage',
-        }),
-      })
-      // Fresh Card
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => createMockScryfallResponse('Fresh Card', 'fresh-oracle-id'),
+        json: async () => createMockCollectionResponse([
+          { name: 'Chain Lightning', oracleId: 'context-oracle-id', oracleText: 'Deal 3 damage' },
+          { name: 'Fresh Card', oracleId: 'fresh-oracle-id' },
+        ]),
       });
 
     const recommendations = await getRecommendations(sourceCard, [contextCard]);

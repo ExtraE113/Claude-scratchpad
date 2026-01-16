@@ -3,11 +3,44 @@
  * Displays the cube graph with nodes (cards) and edges (connections)
  */
 
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import * as d3 from 'd3';
 import { useCube } from '../../context/CubeContext';
-import { useForceSimulation, type SimulationNode, type SimulationEdge } from './useForceSimulation';
+import { useForceSimulation, calculateNodeRadius, type SimulationNode, type SimulationEdge } from './useForceSimulation';
+import { getDegree, hasConnection } from '../../lib/graph';
+import type { Card } from '../../types';
 import styles from './GraphView.module.css';
+
+/** Threshold for considering a node a "hub" (high-degree card) */
+const HUB_DEGREE_THRESHOLD = 3;
+
+/**
+ * Size configuration for degree-based node scaling
+ */
+const MIN_NODE_RADIUS = 8;
+const MAX_NODE_RADIUS = 24;
+const SELECTED_RADIUS_BOOST = 4; // Extra radius when selected
+
+/**
+ * State for the card preview tooltip
+ */
+interface TooltipState {
+  visible: boolean;
+  x: number;
+  y: number;
+  card: SimulationNode['card'] | null;
+}
+
+/**
+ * State for the context menu
+ */
+interface ContextMenuState {
+  visible: boolean;
+  x: number;
+  y: number;
+  nodeId: string | null;
+  cardName: string;
+}
 
 /**
  * Color mapping for MTG colors
@@ -35,6 +68,153 @@ function getCardColor(colors: string[]): string {
 }
 
 /**
+ * Inline styles for context menu and connect modal
+ */
+const contextMenuStyles: Record<string, React.CSSProperties> = {
+  menu: {
+    position: 'absolute',
+    backgroundColor: '#1a1a2e',
+    border: '1px solid #3a3a5a',
+    borderRadius: '6px',
+    padding: '4px 0',
+    minWidth: '150px',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+    zIndex: 1000,
+  },
+  menuItem: {
+    display: 'block',
+    width: '100%',
+    padding: '8px 12px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: '#fff',
+    fontSize: '13px',
+    textAlign: 'left',
+    cursor: 'pointer',
+    transition: 'background-color 0.15s',
+  },
+  menuItemHover: {
+    backgroundColor: '#2a2a4a',
+  },
+  menuItemDanger: {
+    color: '#ff6b6b',
+  },
+  separator: {
+    height: '1px',
+    backgroundColor: '#3a3a5a',
+    margin: '4px 0',
+  },
+  modalOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+  },
+  modal: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: '12px',
+    padding: '20px',
+    width: '90%',
+    maxWidth: '400px',
+    maxHeight: '80vh',
+    display: 'flex',
+    flexDirection: 'column',
+    border: '1px solid #2a2a4a',
+  },
+  modalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '16px',
+  },
+  modalTitle: {
+    fontSize: '16px',
+    fontWeight: 'bold',
+    color: '#fff',
+    margin: 0,
+  },
+  closeButton: {
+    background: 'none',
+    border: 'none',
+    color: '#888',
+    fontSize: '24px',
+    cursor: 'pointer',
+    padding: '4px 8px',
+    lineHeight: 1,
+  },
+  searchInput: {
+    width: '100%',
+    padding: '10px 12px',
+    fontSize: '14px',
+    backgroundColor: '#0f0f1a',
+    border: '1px solid #3a3a5a',
+    borderRadius: '6px',
+    color: '#fff',
+    marginBottom: '12px',
+    boxSizing: 'border-box',
+  },
+  cardList: {
+    flex: 1,
+    overflowY: 'auto',
+    maxHeight: '300px',
+  },
+  cardItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '10px',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    transition: 'background-color 0.15s',
+    marginBottom: '4px',
+  },
+  cardItemHover: {
+    backgroundColor: '#2a2a4a',
+  },
+  cardItemConnected: {
+    opacity: 0.5,
+    cursor: 'not-allowed',
+  },
+  cardThumb: {
+    width: '40px',
+    height: '56px',
+    borderRadius: '4px',
+    objectFit: 'cover',
+  },
+  cardInfo: {
+    flex: 1,
+  },
+  cardName: {
+    fontSize: '14px',
+    color: '#fff',
+    marginBottom: '2px',
+  },
+  cardType: {
+    fontSize: '11px',
+    color: '#888',
+  },
+  connectedBadge: {
+    fontSize: '10px',
+    color: '#6b9fff',
+    backgroundColor: '#2a3a5a',
+    padding: '2px 6px',
+    borderRadius: '4px',
+  },
+  noCards: {
+    textAlign: 'center',
+    color: '#888',
+    padding: '20px',
+    fontSize: '14px',
+  },
+};
+
+/**
  * Props for the GraphView component
  */
 interface GraphViewProps {
@@ -60,6 +240,30 @@ export function GraphView({ width: propWidth, height: propHeight }: GraphViewPro
     height: propHeight || 600,
   });
 
+  // Tooltip state for card preview on hover
+  const [tooltip, setTooltip] = useState<TooltipState>({
+    visible: false,
+    x: 0,
+    y: 0,
+    card: null,
+  });
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({
+    visible: false,
+    x: 0,
+    y: 0,
+    nodeId: null,
+    cardName: '',
+  });
+
+  // Connect modal state
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [connectSourceId, setConnectSourceId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
+  const [hoveredMenuItem, setHoveredMenuItem] = useState<string | null>(null);
+
   // Update dimensions when container resizes
   useEffect(() => {
     if (!containerRef.current) return;
@@ -83,6 +287,37 @@ export function GraphView({ width: propWidth, height: propHeight }: GraphViewPro
     height: dimensions.height,
   });
 
+  // Compute degree for each node to identify roots (degree 0) and hubs (high degree)
+  const nodeDegrees = useMemo(() => {
+    const degrees = new Map<string, number>();
+    for (const node of nodes) {
+      degrees.set(node.id, getDegree(graph, node.id));
+    }
+    return degrees;
+  }, [nodes, graph]);
+
+  // Get other cards for the connect modal
+  const otherCards = useMemo(() => {
+    if (!connectSourceId) return [];
+    const cards: Card[] = [];
+    graph.nodes.forEach((card, id) => {
+      if (id !== connectSourceId) {
+        cards.push(card);
+      }
+    });
+    return cards;
+  }, [graph.nodes, connectSourceId]);
+
+  // Filter cards by search query
+  const filteredCards = useMemo(() => {
+    if (!searchQuery.trim()) return otherCards;
+    const query = searchQuery.toLowerCase();
+    return otherCards.filter(card =>
+      card.name.toLowerCase().includes(query) ||
+      card.typeLine.toLowerCase().includes(query)
+    );
+  }, [otherCards, searchQuery]);
+
   // Handle node click - select card
   const handleNodeClick = useCallback(
     (event: React.MouseEvent, node: SimulationNode) => {
@@ -92,10 +327,135 @@ export function GraphView({ width: propWidth, height: propHeight }: GraphViewPro
     [dispatch]
   );
 
-  // Handle background click - deselect
+  // Handle background click - deselect and close context menu
   const handleBackgroundClick = useCallback(() => {
     dispatch({ type: 'SELECT_CARD', payload: null });
+    setContextMenu(prev => ({ ...prev, visible: false }));
   }, [dispatch]);
+
+  // Handle node right-click - show context menu
+  const handleNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: SimulationNode) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      // Hide tooltip when showing context menu
+      setTooltip(prev => ({ ...prev, visible: false }));
+
+      // Get position relative to the container
+      const containerRect = containerRef.current?.getBoundingClientRect();
+      if (!containerRect) return;
+
+      const x = event.clientX - containerRect.left;
+      const y = event.clientY - containerRect.top;
+
+      setContextMenu({
+        visible: true,
+        x,
+        y,
+        nodeId: node.id,
+        cardName: node.card.name,
+      });
+    },
+    []
+  );
+
+  // Handle remove card from context menu
+  const handleRemoveCard = useCallback(() => {
+    if (contextMenu.nodeId) {
+      dispatch({ type: 'REMOVE_CARD', payload: contextMenu.nodeId });
+    }
+    setContextMenu(prev => ({ ...prev, visible: false }));
+  }, [contextMenu.nodeId, dispatch]);
+
+  // Handle connect to... from context menu
+  const handleOpenConnectModal = useCallback(() => {
+    if (contextMenu.nodeId) {
+      setConnectSourceId(contextMenu.nodeId);
+      setShowConnectModal(true);
+      setSearchQuery('');
+    }
+    setContextMenu(prev => ({ ...prev, visible: false }));
+  }, [contextMenu.nodeId]);
+
+  // Handle closing the connect modal
+  const handleCloseConnectModal = useCallback(() => {
+    setShowConnectModal(false);
+    setConnectSourceId(null);
+    setSearchQuery('');
+  }, []);
+
+  // Handle connecting to a card
+  const handleConnect = useCallback((targetCard: Card) => {
+    if (!connectSourceId) return;
+    if (hasConnection(graph, connectSourceId, targetCard.oracleId)) {
+      return; // Already connected
+    }
+    dispatch({
+      type: 'ADD_CONNECTION',
+      payload: { idA: connectSourceId, idB: targetCard.oracleId }
+    });
+    setShowConnectModal(false);
+    setConnectSourceId(null);
+  }, [connectSourceId, graph, dispatch]);
+
+  // Handle node mouse enter - show tooltip
+  const handleNodeMouseEnter = useCallback(
+    (event: React.MouseEvent, node: SimulationNode) => {
+      // Don't show tooltip if context menu is open
+      if (contextMenu.visible) return;
+
+      // Get position relative to the container
+      const containerRect = containerRef.current?.getBoundingClientRect();
+      if (!containerRect) return;
+
+      // Position tooltip near the cursor with some offset
+      const x = event.clientX - containerRect.left + 15;
+      const y = event.clientY - containerRect.top + 15;
+
+      setTooltip({
+        visible: true,
+        x,
+        y,
+        card: node.card,
+      });
+    },
+    [contextMenu.visible]
+  );
+
+  // Handle node mouse leave - hide tooltip
+  const handleNodeMouseLeave = useCallback(() => {
+    setTooltip((prev) => ({ ...prev, visible: false }));
+  }, []);
+
+  // Handle node mouse move - update tooltip position
+  const handleNodeMouseMove = useCallback(
+    (event: React.MouseEvent) => {
+      if (!tooltip.visible) return;
+
+      const containerRect = containerRef.current?.getBoundingClientRect();
+      if (!containerRect) return;
+
+      // Position tooltip near the cursor with some offset
+      const x = event.clientX - containerRect.left + 15;
+      const y = event.clientY - containerRect.top + 15;
+
+      setTooltip((prev) => ({ ...prev, x, y }));
+    },
+    [tooltip.visible]
+  );
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (contextMenu.visible) {
+        setContextMenu(prev => ({ ...prev, visible: false }));
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [contextMenu.visible]);
 
   // Set up D3 zoom behavior
   useEffect(() => {
@@ -193,6 +553,9 @@ export function GraphView({ width: propWidth, height: propHeight }: GraphViewPro
     };
   };
 
+  // Get source card name for modal title
+  const sourceCardName = connectSourceId ? graph.nodes.get(connectSourceId)?.name ?? '' : '';
+
   // Empty state
   if (graph.nodes.size === 0) {
     return (
@@ -236,27 +599,145 @@ export function GraphView({ width: propWidth, height: propHeight }: GraphViewPro
           {nodes.map((node) => {
             const isSelected = node.id === selectedCardId;
             const color = getCardColor(node.card.colors);
-            const radius = isSelected ? 14 : 10;
+            const degree = nodeDegrees.get(node.id) ?? 0;
+            // Calculate radius based on degree - hubs appear larger
+            const baseRadius = calculateNodeRadius(degree, MIN_NODE_RADIUS, MAX_NODE_RADIUS);
+            const radius = isSelected ? baseRadius + SELECTED_RADIUS_BOOST : baseRadius;
+            const isRoot = degree === 0;
+            const isHub = degree >= HUB_DEGREE_THRESHOLD;
+
+            // Build class list for node
+            const nodeClasses = [
+              styles.node,
+              isSelected ? styles.nodeSelected : '',
+              isRoot ? styles.rootNode : '',
+              isHub ? styles.hubNode : '',
+            ].filter(Boolean).join(' ');
 
             return (
               <g key={node.id}>
                 <circle
-                  className={`${styles.node} ${isSelected ? styles.nodeSelected : ''}`}
+                  className={nodeClasses}
                   cx={node.x}
                   cy={node.y}
                   r={radius}
                   fill={color}
                   stroke={isSelected ? '#ffffff' : color}
                   strokeWidth={isSelected ? 3 : 1.5}
+                  strokeDasharray={isRoot ? '4 2' : undefined}
                   onClick={(e) => handleNodeClick(e, node)}
-                >
-                  <title>{node.card.name}</title>
-                </circle>
+                  onContextMenu={(e) => handleNodeContextMenu(e, node)}
+                  onMouseEnter={(e) => handleNodeMouseEnter(e, node)}
+                  onMouseMove={handleNodeMouseMove}
+                  onMouseLeave={handleNodeMouseLeave}
+                />
               </g>
             );
           })}
         </g>
       </svg>
+
+      {/* Context Menu */}
+      {contextMenu.visible && (
+        <div
+          style={{
+            ...contextMenuStyles.menu,
+            left: contextMenu.x,
+            top: contextMenu.y,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            style={{
+              ...contextMenuStyles.menuItem,
+              ...(hoveredMenuItem === 'connect' ? contextMenuStyles.menuItemHover : {}),
+            }}
+            onMouseEnter={() => setHoveredMenuItem('connect')}
+            onMouseLeave={() => setHoveredMenuItem(null)}
+            onClick={handleOpenConnectModal}
+          >
+            Connect to...
+          </button>
+          <div style={contextMenuStyles.separator} />
+          <button
+            style={{
+              ...contextMenuStyles.menuItem,
+              ...contextMenuStyles.menuItemDanger,
+              ...(hoveredMenuItem === 'remove' ? contextMenuStyles.menuItemHover : {}),
+            }}
+            onMouseEnter={() => setHoveredMenuItem('remove')}
+            onMouseLeave={() => setHoveredMenuItem(null)}
+            onClick={handleRemoveCard}
+          >
+            Remove card
+          </button>
+        </div>
+      )}
+
+      {/* Connect Modal */}
+      {showConnectModal && (
+        <div style={contextMenuStyles.modalOverlay} onClick={handleCloseConnectModal}>
+          <div style={contextMenuStyles.modal} onClick={e => e.stopPropagation()}>
+            <div style={contextMenuStyles.modalHeader}>
+              <h3 style={contextMenuStyles.modalTitle}>Connect "{sourceCardName}" to...</h3>
+              <button style={contextMenuStyles.closeButton} onClick={handleCloseConnectModal}>
+                x
+              </button>
+            </div>
+
+            <input
+              type="text"
+              placeholder="Search cards..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              style={contextMenuStyles.searchInput}
+              autoFocus
+            />
+
+            <div style={contextMenuStyles.cardList}>
+              {filteredCards.length === 0 ? (
+                <div style={contextMenuStyles.noCards}>
+                  {otherCards.length === 0
+                    ? 'Add more cards to create connections'
+                    : 'No cards match your search'}
+                </div>
+              ) : (
+                filteredCards.map(card => {
+                  const isConnected = connectSourceId ? hasConnection(graph, connectSourceId, card.oracleId) : false;
+                  return (
+                    <div
+                      key={card.oracleId}
+                      style={{
+                        ...contextMenuStyles.cardItem,
+                        ...(hoveredCardId === card.oracleId && !isConnected ? contextMenuStyles.cardItemHover : {}),
+                        ...(isConnected ? contextMenuStyles.cardItemConnected : {}),
+                      }}
+                      onMouseEnter={() => setHoveredCardId(card.oracleId)}
+                      onMouseLeave={() => setHoveredCardId(null)}
+                      onClick={() => !isConnected && handleConnect(card)}
+                    >
+                      {card.artCropUri && (
+                        <img
+                          src={card.artCropUri}
+                          alt={card.name}
+                          style={contextMenuStyles.cardThumb}
+                        />
+                      )}
+                      <div style={contextMenuStyles.cardInfo}>
+                        <div style={contextMenuStyles.cardName}>{card.name}</div>
+                        <div style={contextMenuStyles.cardType}>{card.typeLine}</div>
+                      </div>
+                      {isConnected && (
+                        <span style={contextMenuStyles.connectedBadge}>Connected</span>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Zoom controls */}
       <div className={styles.zoomControls}>
@@ -285,6 +766,24 @@ export function GraphView({ width: propWidth, height: propHeight }: GraphViewPro
           R
         </button>
       </div>
+
+      {/* Card preview tooltip */}
+      {tooltip.visible && tooltip.card && (
+        <div
+          className={styles.cardTooltip}
+          style={{
+            left: tooltip.x,
+            top: tooltip.y,
+          }}
+        >
+          <img
+            src={tooltip.card.artCropUri || tooltip.card.imageUri}
+            alt={tooltip.card.name}
+            className={styles.cardTooltipImage}
+          />
+          <div className={styles.cardTooltipName}>{tooltip.card.name}</div>
+        </div>
+      )}
     </div>
   );
 }

@@ -14,10 +14,20 @@ import {
 } from 'react';
 
 import type { Card, CubeGraph } from '../types';
-import { cubeReducer, createInitialState, type CubeState, type CubeAction } from './cubeReducer';
-import { getNeighbors } from '../lib/graph';
+import { cubeReducer, createInitialState, type CubeState, type CubeAction, type NotificationType } from './cubeReducer';
+import { getNeighbors, hasCard } from '../lib/graph';
 import { fetchCard } from '../lib/scryfall';
 import { getRecommendations } from '../lib/recommender';
+
+/**
+ * Result of adding a card - indicates whether the card was added or was a duplicate.
+ */
+interface AddCardResult {
+  /** The card that was requested */
+  card: Card;
+  /** Whether the card was already in the cube */
+  wasDuplicate: boolean;
+}
 
 /**
  * Context value type including state, dispatch, and async helpers.
@@ -28,11 +38,13 @@ interface CubeContextValue {
   /** Dispatch function for actions */
   dispatch: Dispatch<CubeAction>;
   /** Async helper to add a card by name (fetches from Scryfall) */
-  addCardByName: (name: string) => Promise<Card>;
+  addCardByName: (name: string) => Promise<AddCardResult>;
   /** Async helper to fetch recommendations for the selected card */
   fetchRecommendationsForSelected: () => Promise<void>;
   /** Build context cards for recommendation requests */
   buildRecommendationContext: (oracleId: string) => Card[];
+  /** Helper to show a notification message */
+  showNotification: (message: string, type?: NotificationType) => void;
 }
 
 /**
@@ -111,20 +123,48 @@ export function CubeProvider({ children }: CubeProviderProps) {
   );
 
   /**
+   * Helper to show a notification message.
+   * Creates a unique ID for the notification to support auto-dismissal.
+   *
+   * @param message - The message to display
+   * @param type - The type of notification (default: 'info')
+   */
+  const showNotification = useCallback(
+    (message: string, type: NotificationType = 'info') => {
+      const id = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      dispatch({
+        type: 'SET_NOTIFICATION',
+        payload: { id, message, type },
+      });
+    },
+    [dispatch]
+  );
+
+  /**
    * Async helper to add a card by name.
    * Fetches the card from Scryfall and dispatches ADD_CARD.
+   * Shows a warning notification if the card is already in the cube.
    *
    * @param name - The exact card name to add
-   * @returns The added Card object
+   * @returns Object containing the card and whether it was a duplicate
    * @throws Error if the card cannot be fetched
    */
   const addCardByName = useCallback(
-    async (name: string): Promise<Card> => {
+    async (name: string): Promise<AddCardResult> => {
       const card = await fetchCard(name);
+
+      // Check if the card is already in the cube
+      const isDuplicate = hasCard(state.graph, card.oracleId);
+
+      if (isDuplicate) {
+        showNotification(`"${card.name}" is already in your cube`, 'warning');
+        return { card, wasDuplicate: true };
+      }
+
       dispatch({ type: 'ADD_CARD', payload: card });
-      return card;
+      return { card, wasDuplicate: false };
     },
-    [dispatch]
+    [dispatch, state.graph, showNotification]
   );
 
   /**
@@ -181,8 +221,9 @@ export function CubeProvider({ children }: CubeProviderProps) {
       addCardByName,
       fetchRecommendationsForSelected,
       buildRecommendationContext,
+      showNotification,
     }),
-    [state, dispatch, addCardByName, fetchRecommendationsForSelected, buildRecommendationContext]
+    [state, dispatch, addCardByName, fetchRecommendationsForSelected, buildRecommendationContext, showNotification]
   );
 
   return <CubeContext.Provider value={contextValue}>{children}</CubeContext.Provider>;

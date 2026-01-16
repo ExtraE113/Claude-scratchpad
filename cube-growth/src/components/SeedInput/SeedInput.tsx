@@ -144,8 +144,13 @@ export function SeedInput() {
     setResults([]);
 
     try {
-      const card = await addCardByName(cardName);
+      const { card, wasDuplicate } = await addCardByName(cardName);
+      // Select the card even if it was a duplicate (to highlight it)
       dispatch({ type: 'SELECT_CARD', payload: card.oracleId });
+      // If it was a duplicate, the notification is already shown by addCardByName
+      if (!wasDuplicate) {
+        // Card was successfully added
+      }
     } catch (error) {
       console.error('Failed to add card:', error);
     }

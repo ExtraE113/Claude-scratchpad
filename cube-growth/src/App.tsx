@@ -3,6 +3,7 @@ import { GraphView } from './components/GraphView';
 import { SeedInput } from './components/SeedInput/SeedInput';
 import { CardPanel } from './components/CardPanel/CardPanel';
 import { RecommendationPanel } from './components/RecommendationPanel/RecommendationPanel';
+import { Toast } from './components/common/Toast';
 import { useCube } from './context/CubeContext';
 import './App.css';
 
@@ -30,6 +31,8 @@ function CubeApp() {
           <RecommendationPanel />
         </aside>
       </main>
+
+      <Toast />
     </div>
   );
 }

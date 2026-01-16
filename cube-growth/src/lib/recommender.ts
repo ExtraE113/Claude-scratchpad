@@ -6,7 +6,7 @@
  */
 
 import type { Card, Recommendation } from '../types';
-import { fetchCard } from './scryfall';
+import { fetchCardsByNames } from './scryfall';
 import { isCommanderOnlyCard } from './commanderFilter';
 
 /**
@@ -95,38 +95,54 @@ export async function getRecommendations(
     ...context.map((c) => c.oracleId),
   ]);
 
-  // Filter and map recommendations
+  // Pre-filter recommendations by name (skip obvious commander-only cards)
+  // We'll fetch more than 10 to account for cards that may be filtered out after fetching
+  const FETCH_BUFFER = 15; // Fetch extra cards in case some are filtered out
+  const MAX_RECOMMENDATIONS = 10;
+
+  const candidateRecs = data.inRecs.filter((rec) => !isCommanderOnlyCard(rec.name));
+  const recsToFetch = candidateRecs.slice(0, MAX_RECOMMENDATIONS + FETCH_BUFFER);
+
+  // Batch fetch all candidate cards from Scryfall
+  const namesToFetch = recsToFetch.map((rec) => rec.name);
+  const { cards: fetchedCards, notFound } = await fetchCardsByNames(namesToFetch);
+
+  // Log any cards that weren't found (for debugging)
+  if (notFound.length > 0) {
+    console.warn('Cards not found in Scryfall:', notFound);
+  }
+
+  // Create a map of card name -> fetched Card for easy lookup
+  const cardsByName = new Map<string, Card>();
+  for (const card of fetchedCards) {
+    cardsByName.set(card.name, card);
+  }
+
+  // Build recommendations in the original order, filtering out commander-only cards
   const recommendations: Recommendation[] = [];
 
-  for (const rec of data.inRecs) {
-    // Skip commander-only cards
-    if (isCommanderOnlyCard(rec.name)) {
-      continue;
-    }
-
-    // Stop once we have 10 recommendations
-    if (recommendations.length >= 10) {
+  for (const rec of recsToFetch) {
+    // Stop once we have enough recommendations
+    if (recommendations.length >= MAX_RECOMMENDATIONS) {
       break;
     }
 
-    try {
-      // Fetch full card data from Scryfall
-      const card = await fetchCard(rec.name);
-
-      // Check oracle text for commander keywords after fetching
-      if (isCommanderOnlyCard(card.name, card.oracleText)) {
-        continue;
-      }
-
-      recommendations.push({
-        card,
-        score: rec.score,
-        alreadyInGraph: contextOracleIds.has(card.oracleId),
-      });
-    } catch (error) {
-      // Skip cards that fail to fetch from Scryfall
-      console.warn(`Failed to fetch card "${rec.name}":`, error);
+    const card = cardsByName.get(rec.name);
+    if (!card) {
+      // Card wasn't found in Scryfall
+      continue;
     }
+
+    // Check oracle text for commander keywords after fetching
+    if (isCommanderOnlyCard(card.name, card.oracleText)) {
+      continue;
+    }
+
+    recommendations.push({
+      card,
+      score: rec.score,
+      alreadyInGraph: contextOracleIds.has(card.oracleId),
+    });
   }
 
   return recommendations;

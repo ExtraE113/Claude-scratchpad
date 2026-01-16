@@ -13,6 +13,23 @@ import {
 } from '../lib/graph';
 
 /**
+ * Notification types for toast messages.
+ */
+export type NotificationType = 'info' | 'warning' | 'error' | 'success';
+
+/**
+ * Notification state for toast messages.
+ */
+export interface Notification {
+  /** Unique ID for the notification */
+  id: string;
+  /** The message to display */
+  message: string;
+  /** Type of notification (affects styling) */
+  type: NotificationType;
+}
+
+/**
  * The shape of the cube state.
  */
 export interface CubeState {
@@ -26,6 +43,8 @@ export interface CubeState {
   isLoadingRecs: boolean;
   /** Error message if recommendation fetch failed, or null */
   recsError: string | null;
+  /** Current notification to display, or null */
+  notification: Notification | null;
 }
 
 /**
@@ -39,7 +58,9 @@ export type CubeAction =
   | { type: 'SELECT_CARD'; payload: string | null }
   | { type: 'SET_RECOMMENDATIONS'; payload: Recommendation[] }
   | { type: 'SET_LOADING_RECS'; payload: boolean }
-  | { type: 'SET_RECS_ERROR'; payload: string | null };
+  | { type: 'SET_RECS_ERROR'; payload: string | null }
+  | { type: 'SET_NOTIFICATION'; payload: Notification }
+  | { type: 'CLEAR_NOTIFICATION'; payload?: string };
 
 /**
  * Creates the initial cube state with an empty graph.
@@ -51,6 +72,7 @@ export function createInitialState(): CubeState {
     recommendations: [],
     isLoadingRecs: false,
     recsError: null,
+    notification: null,
   };
 }
 
@@ -138,6 +160,24 @@ export function cubeReducer(state: CubeState, action: CubeAction): CubeState {
         ...state,
         recsError: action.payload,
         isLoadingRecs: false,
+      };
+    }
+
+    case 'SET_NOTIFICATION': {
+      return {
+        ...state,
+        notification: action.payload,
+      };
+    }
+
+    case 'CLEAR_NOTIFICATION': {
+      // If a specific ID is provided, only clear if it matches
+      if (action.payload && state.notification?.id !== action.payload) {
+        return state;
+      }
+      return {
+        ...state,
+        notification: null,
       };
     }
 

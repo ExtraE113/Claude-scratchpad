@@ -55,6 +55,21 @@
   filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
 }
 
+/* Root node (0 connections) - dashed border indicator */
+.rootNode {
+  stroke-opacity: 0.8;
+}
+
+/* Hub node (3+ connections) - glow effect */
+.hubNode {
+  filter: drop-shadow(0 0 6px currentColor) drop-shadow(0 0 12px currentColor);
+}
+
+/* Ensure hub glow combines properly with selection */
+.hubNode.nodeSelected {
+  filter: drop-shadow(0 0 6px currentColor) drop-shadow(0 0 12px currentColor) drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
+}
+
 /* Node label (shown on hover via title) */
 .nodeLabel {
   font-size: 12px;
@@ -156,4 +171,36 @@
   font-size: 16px;
   opacity: 0.5;
   text-align: center;
+}
+
+/* Card preview tooltip */
+.cardTooltip {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1000;
+  background-color: #2a2a3e;
+  border: 2px solid #4a4a6a;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  max-width: 200px;
+}
+
+.cardTooltipImage {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+}
+
+.cardTooltipName {
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #ffffff;
+  text-align: center;
+  background-color: rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { searchCards, fetchCard } from './scryfall';
+import { searchCards, fetchCard, fetchCardsByNames } from './scryfall';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -346,5 +346,182 @@ describe('fetchCard', () => {
     mockFetch.mockRejectedValueOnce(new Error('Connection refused'));
 
     await expect(fetchCard('Lightning Bolt')).rejects.toThrow('Connection refused');
+  });
+});
+
+describe('fetchCardsByNames', () => {
+  // Helper to create mock Scryfall card responses
+  function createMockScryfallCard(name: string, oracleId: string) {
+    return {
+      oracle_id: oracleId,
+      name,
+      image_uris: {
+        normal: `https://cards.scryfall.io/normal/${name.toLowerCase().replace(/\s/g, '-')}.jpg`,
+        art_crop: `https://cards.scryfall.io/art_crop/${name.toLowerCase().replace(/\s/g, '-')}.jpg`,
+      },
+      mana_cost: '{1}{R}',
+      cmc: 2,
+      colors: ['R'],
+      color_identity: ['R'],
+      type_line: 'Instant',
+      oracle_text: 'Test card.',
+    };
+  }
+
+  it('returns empty result for empty input', async () => {
+    const result = await fetchCardsByNames([]);
+
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(result.cards).toEqual([]);
+    expect(result.notFound).toEqual([]);
+  });
+
+  it('fetches multiple cards in a single batch request', async () => {
+    const mockCollectionResponse = {
+      object: 'list',
+      data: [
+        createMockScryfallCard('Lightning Bolt', 'bolt-id'),
+        createMockScryfallCard('Chain Lightning', 'chain-id'),
+      ],
+      not_found: [],
+    };
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockCollectionResponse,
+    });
+
+    const result = await fetchCardsByNames(['Lightning Bolt', 'Chain Lightning']);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://api.scryfall.com/cards/collection',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identifiers: [
+            { name: 'Lightning Bolt' },
+            { name: 'Chain Lightning' },
+          ],
+        }),
+      })
+    );
+
+    expect(result.cards).toHaveLength(2);
+    expect(result.cards[0].name).toBe('Lightning Bolt');
+    expect(result.cards[1].name).toBe('Chain Lightning');
+    expect(result.notFound).toEqual([]);
+  });
+
+  it('handles not_found cards gracefully', async () => {
+    const mockCollectionResponse = {
+      object: 'list',
+      data: [createMockScryfallCard('Lightning Bolt', 'bolt-id')],
+      not_found: [{ name: 'Nonexistent Card' }],
+    };
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockCollectionResponse,
+    });
+
+    const result = await fetchCardsByNames(['Lightning Bolt', 'Nonexistent Card']);
+
+    expect(result.cards).toHaveLength(1);
+    expect(result.cards[0].name).toBe('Lightning Bolt');
+    expect(result.notFound).toEqual(['Nonexistent Card']);
+  });
+
+  it('deduplicates input names', async () => {
+    const mockCollectionResponse = {
+      object: 'list',
+      data: [createMockScryfallCard('Lightning Bolt', 'bolt-id')],
+      not_found: [],
+    };
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockCollectionResponse,
+    });
+
+    await fetchCardsByNames(['Lightning Bolt', 'Lightning Bolt', 'Lightning Bolt']);
+
+    // Should only request the card once
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://api.scryfall.com/cards/collection',
+      expect.objectContaining({
+        body: JSON.stringify({
+          identifiers: [{ name: 'Lightning Bolt' }],
+        }),
+      })
+    );
+  });
+
+  it('throws error on API failure', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+    });
+
+    await expect(fetchCardsByNames(['Lightning Bolt'])).rejects.toThrow(
+      'Scryfall collection fetch failed: 500 Internal Server Error'
+    );
+  });
+
+  it('throws error on network failure', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('Network error'));
+
+    await expect(fetchCardsByNames(['Lightning Bolt'])).rejects.toThrow('Network error');
+  });
+
+  it('correctly maps card data from collection response', async () => {
+    const mockCollectionResponse = {
+      object: 'list',
+      data: [
+        {
+          oracle_id: 'test-oracle-id',
+          name: 'Test Card',
+          image_uris: {
+            normal: 'https://cards.scryfall.io/normal/test.jpg',
+            art_crop: 'https://cards.scryfall.io/art_crop/test.jpg',
+          },
+          mana_cost: '{2}{U}{U}',
+          cmc: 4,
+          colors: ['U'],
+          color_identity: ['U'],
+          type_line: 'Enchantment',
+          oracle_text: 'Test oracle text.',
+          power: undefined,
+          toughness: undefined,
+          loyalty: undefined,
+        },
+      ],
+      not_found: [],
+    };
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockCollectionResponse,
+    });
+
+    const result = await fetchCardsByNames(['Test Card']);
+
+    expect(result.cards[0]).toEqual({
+      oracleId: 'test-oracle-id',
+      name: 'Test Card',
+      imageUri: 'https://cards.scryfall.io/normal/test.jpg',
+      artCropUri: 'https://cards.scryfall.io/art_crop/test.jpg',
+      manaCost: '{2}{U}{U}',
+      cmc: 4,
+      colors: ['U'],
+      colorIdentity: ['U'],
+      typeLine: 'Enchantment',
+      oracleText: 'Test oracle text.',
+      power: undefined,
+      toughness: undefined,
+      loyalty: undefined,
+    });
   });
 });

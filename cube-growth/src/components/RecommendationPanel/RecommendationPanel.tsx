@@ -315,6 +315,7 @@ export function RecommendationPanel() {
   const handleAdd = async (recommendation: Recommendation) => {
     try {
       await addCardByName(recommendation.card.name);
+      // Notification for duplicates is handled by addCardByName
     } catch (error) {
       console.error('Failed to add card:', error);
     }
@@ -324,11 +325,15 @@ export function RecommendationPanel() {
     if (!selectedCardId) return;
 
     try {
-      const card = await addCardByName(recommendation.card.name);
-      dispatch({
-        type: 'ADD_CONNECTION',
-        payload: { idA: selectedCardId, idB: card.oracleId },
-      });
+      const { card, wasDuplicate } = await addCardByName(recommendation.card.name);
+      // Always add connection, even if the card was already in the cube
+      // (the duplicate notification is handled by addCardByName)
+      if (!wasDuplicate) {
+        dispatch({
+          type: 'ADD_CONNECTION',
+          payload: { idA: selectedCardId, idB: card.oracleId },
+        });
+      }
     } catch (error) {
       console.error('Failed to add card and connect:', error);
     }

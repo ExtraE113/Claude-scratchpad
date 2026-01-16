@@ -188,3 +188,106 @@ export async function fetchCard(name: string): Promise<Card> {
     return scryfallToCard(data);
   });
 }
+
+/**
+ * Maximum number of identifiers per /cards/collection request.
+ * Scryfall limits batch requests to 75 cards.
+ */
+const COLLECTION_BATCH_SIZE = 75;
+
+/**
+ * Scryfall collection response type
+ */
+interface ScryfallCollectionResponse {
+  object: 'list';
+  data: ScryfallCard[];
+  not_found: Array<{ name?: string; id?: string }>;
+}
+
+/**
+ * Result of a batch card fetch operation.
+ * Contains successfully fetched cards and names that weren't found.
+ */
+export interface BatchFetchResult {
+  /** Successfully fetched cards */
+  cards: Card[];
+  /** Card names that were not found */
+  notFound: string[];
+}
+
+/**
+ * Fetch multiple cards by their exact names using Scryfall's /cards/collection endpoint.
+ * This is more efficient than fetching cards one-by-one when you need multiple cards.
+ *
+ * The collection endpoint accepts up to 75 identifiers per request.
+ * If more than 75 names are provided, multiple requests will be made automatically.
+ *
+ * @param names - Array of exact card names to fetch
+ * @returns BatchFetchResult with found cards and not-found names
+ */
+export async function fetchCardsByNames(names: string[]): Promise<BatchFetchResult> {
+  if (names.length === 0) {
+    return { cards: [], notFound: [] };
+  }
+
+  // Deduplicate names while preserving order
+  const uniqueNames = [...new Set(names)];
+
+  // Split into batches of COLLECTION_BATCH_SIZE
+  const batches: string[][] = [];
+  for (let i = 0; i < uniqueNames.length; i += COLLECTION_BATCH_SIZE) {
+    batches.push(uniqueNames.slice(i, i + COLLECTION_BATCH_SIZE));
+  }
+
+  // Fetch all batches (through the rate-limited queue)
+  const allCards: Card[] = [];
+  const allNotFound: string[] = [];
+
+  for (const batch of batches) {
+    const result = await fetchCollectionBatch(batch);
+    allCards.push(...result.cards);
+    allNotFound.push(...result.notFound);
+  }
+
+  return { cards: allCards, notFound: allNotFound };
+}
+
+/**
+ * Fetch a single batch of cards from the /cards/collection endpoint.
+ * This is an internal helper that handles a single API request.
+ *
+ * @param names - Array of card names (max 75)
+ * @returns BatchFetchResult for this batch
+ */
+async function fetchCollectionBatch(names: string[]): Promise<BatchFetchResult> {
+  return requestQueue.enqueue(async () => {
+    const url = `${SCRYFALL_BASE_URL}/cards/collection`;
+
+    // Build the identifiers array using name-based lookups
+    const identifiers = names.map((name) => ({ name }));
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ identifiers }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Scryfall collection fetch failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data: ScryfallCollectionResponse = await response.json();
+
+    // Map found cards
+    const cards = data.data.map(scryfallToCard);
+
+    // Extract not-found names
+    const notFound = data.not_found
+      .filter((entry): entry is { name: string } => typeof entry.name === 'string')
+      .map((entry) => entry.name);
+
+    return { cards, notFound };
+  });
+}
