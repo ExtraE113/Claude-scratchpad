@@ -4,12 +4,15 @@
  * Provides card recommendations using the EDHREC API.
  * Uses Kenrith, the Returned King as a neutral 5-color commander.
  * Cards are weighted using Personalized PageRank for better relevance.
+ * Baseline scores (Kenrith + 0 cards) are subtracted to filter out
+ * generic 5-color goodstuff and highlight context-specific synergies.
  */
 
 import type { Card, CubeGraph, Recommendation } from '../types';
 import { fetchCardsByNames } from './scryfall';
 import { isCommanderOnlyCard } from './commanderFilter';
 import { calculatePPRWeights, buildWeightedCardNames } from './pprWeights';
+import { getBaselineCache } from './baselineCache';
 
 /**
  * The commander used for EDHREC requests.
@@ -22,6 +25,18 @@ const DEFAULT_COMMANDER = 'Kenrith, the Returned King';
  * Higher weights mean more repetitions, so we cap to avoid huge requests.
  */
 const MAX_CARD_ENTRIES = 100;
+
+/**
+ * Number of pages to fetch for recommendations.
+ * We fetch multiple pages to build a good candidate pool before
+ * applying baseline subtraction and re-sorting.
+ */
+const PAGES_TO_FETCH = 3;
+
+/**
+ * Recommendations per page (EDHREC default).
+ */
+const RECS_PER_PAGE = 100;
 
 /**
  * EDHREC API response type
@@ -58,9 +73,52 @@ interface EDHRECRequest {
 }
 
 /**
+ * Intermediate recommendation before full card data is fetched.
+ */
+interface RawRecommendation {
+  name: string;
+  oracleId: string;
+  rawScore: number;
+  adjustedScore: number;
+}
+
+/**
+ * Fetches a single page of recommendations from EDHREC.
+ */
+async function fetchRecommendationPage(
+  cardNames: string[],
+  offset: number
+): Promise<EDHRECResponse> {
+  const requestBody: EDHRECRequest = {
+    cards: cardNames,
+    commanders: [DEFAULT_COMMANDER],
+    name: '',
+    options: {
+      excludeLands: false,
+      offset,
+    },
+  };
+
+  const response = await fetch('/api/edhrec/recs', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    throw new Error(`EDHREC request failed: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
  * Get card recommendations from EDHREC based on a source card and context.
  * Uses Personalized PageRank to weight cards by their importance relative
- * to the source card.
+ * to the source card. Subtracts baseline scores (Kenrith + 0 cards) to
+ * filter out generic goodstuff and highlight context-specific synergies.
  *
  * @param sourceCard - The card to get recommendations for
  * @param context - Array of context cards (neighbors in the graph)
@@ -84,31 +142,55 @@ export async function getRecommendations(
   // Build weighted card names (higher weight = more repetitions)
   const cardNames = buildWeightedCardNames(cardNameTuples, weights, MAX_CARD_ENTRIES);
 
-  // Build the request body
-  const requestBody: EDHRECRequest = {
-    cards: cardNames,
-    commanders: [DEFAULT_COMMANDER],
-    name: '',
-    options: {
-      excludeLands: false,
-      offset: 0,
-    },
-  };
+  // Get the baseline cache for score adjustment
+  const baselineCache = await getBaselineCache();
 
-  // Make the request to the proxied EDHREC endpoint
-  const response = await fetch('/api/edhrec/recs', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(requestBody),
-  });
+  // Fetch multiple pages to build a candidate pool
+  const candidates = new Map<string, RawRecommendation>();
 
-  if (!response.ok) {
-    throw new Error(`EDHREC request failed: ${response.status} ${response.statusText}`);
+  for (let page = 0; page < PAGES_TO_FETCH; page++) {
+    const offset = page * RECS_PER_PAGE;
+
+    try {
+      const data = await fetchRecommendationPage(cardNames, offset);
+
+      for (const rec of data.inRecs) {
+        // Skip if we already have this card (from earlier page)
+        if (candidates.has(rec.name)) {
+          continue;
+        }
+
+        // Skip commander-only cards early
+        if (isCommanderOnlyCard(rec.name)) {
+          continue;
+        }
+
+        // Calculate adjusted score by subtracting baseline
+        const baselineScore = baselineCache.get(rec.name) ?? 0;
+        const adjustedScore = rec.score - baselineScore;
+
+        candidates.set(rec.name, {
+          name: rec.name,
+          oracleId: rec.oracle_id,
+          rawScore: rec.score,
+          adjustedScore,
+        });
+      }
+
+      // Stop if no more pages
+      if (!data.more) {
+        break;
+      }
+    } catch (error) {
+      console.warn(`Failed to fetch recommendation page ${page}:`, error);
+      break;
+    }
   }
 
-  const data: EDHRECResponse = await response.json();
+  // Sort candidates by adjusted score (descending)
+  const sortedCandidates = Array.from(candidates.values()).sort(
+    (a, b) => b.adjustedScore - a.adjustedScore
+  );
 
   // Get the set of oracle IDs already in context for marking alreadyInGraph
   const contextOracleIds = new Set([
@@ -121,11 +203,10 @@ export async function getRecommendations(
   const FETCH_BUFFER = 15; // Fetch extra cards in case some are filtered out
   const MAX_RECOMMENDATIONS = 10;
 
-  const candidateRecs = data.inRecs.filter((rec) => !isCommanderOnlyCard(rec.name));
-  const recsToFetch = candidateRecs.slice(0, MAX_RECOMMENDATIONS + FETCH_BUFFER);
+  const topCandidates = sortedCandidates.slice(0, MAX_RECOMMENDATIONS + FETCH_BUFFER);
 
   // Batch fetch all candidate cards from Scryfall
-  const namesToFetch = recsToFetch.map((rec) => rec.name);
+  const namesToFetch = topCandidates.map((c) => c.name);
   const { cards: fetchedCards, notFound } = await fetchCardsByNames(namesToFetch);
 
   // Log any cards that weren't found (for debugging)
@@ -139,16 +220,16 @@ export async function getRecommendations(
     cardsByName.set(card.name, card);
   }
 
-  // Build recommendations in the original order, filtering out commander-only cards
+  // Build recommendations in the sorted order, filtering out commander-only cards
   const recommendations: Recommendation[] = [];
 
-  for (const rec of recsToFetch) {
+  for (const candidate of topCandidates) {
     // Stop once we have enough recommendations
     if (recommendations.length >= MAX_RECOMMENDATIONS) {
       break;
     }
 
-    const card = cardsByName.get(rec.name);
+    const card = cardsByName.get(candidate.name);
     if (!card) {
       // Card wasn't found in Scryfall
       continue;
@@ -161,7 +242,7 @@ export async function getRecommendations(
 
     recommendations.push({
       card,
-      score: rec.score,
+      score: candidate.adjustedScore,
       alreadyInGraph: contextOracleIds.has(card.oracleId),
     });
   }
