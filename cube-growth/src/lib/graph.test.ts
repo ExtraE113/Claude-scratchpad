@@ -666,7 +666,8 @@ describe('getDegree()', () => {
   });
 
   it('correctly handles card that had edges removed', () => {
-    let { graph, cards } = createLinearGraph(3);
+    const { graph: initialGraph, cards } = createLinearGraph(3);
+    let graph = initialGraph;
     // 1 -- 2 -- 3
     expect(getDegree(graph, cards[1].oracleId)).toBe(2);
 
@@ -707,7 +708,8 @@ describe('hasCard()', () => {
   });
 
   it('returns false after card is removed', () => {
-    let { graph, cards } = createGraphWithCards(2);
+    const { graph: initialGraph, cards } = createGraphWithCards(2);
+    let graph = initialGraph;
     expect(hasCard(graph, cards[0].oracleId)).toBe(true);
 
     graph = removeCard(graph, cards[0].oracleId);
@@ -756,7 +758,8 @@ describe('hasConnection()', () => {
   });
 
   it('returns false after connection is removed', () => {
-    let { graph, cards } = createLinearGraph(2);
+    const { graph: initialGraph, cards } = createLinearGraph(2);
+    let graph = initialGraph;
     expect(hasConnection(graph, cards[0].oracleId, cards[1].oracleId)).toBe(true);
 
     graph = removeConnection(graph, cards[0].oracleId, cards[1].oracleId);

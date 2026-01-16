@@ -3,17 +3,25 @@
  *
  * Provides card recommendations using the EDHREC API.
  * Uses Kenrith, the Returned King as a neutral 5-color commander.
+ * Cards are weighted using Personalized PageRank for better relevance.
  */
 
-import type { Card, Recommendation } from '../types';
+import type { Card, CubeGraph, Recommendation } from '../types';
 import { fetchCardsByNames } from './scryfall';
 import { isCommanderOnlyCard } from './commanderFilter';
+import { calculatePPRWeights, buildWeightedCardNames } from './pprWeights';
 
 /**
  * The commander used for EDHREC requests.
  * Kenrith is a 5-color commander that doesn't restrict color identity.
  */
 const DEFAULT_COMMANDER = 'Kenrith, the Returned King';
+
+/**
+ * Maximum number of card name entries in the EDHREC request.
+ * Higher weights mean more repetitions, so we cap to avoid huge requests.
+ */
+const MAX_CARD_ENTRIES = 100;
 
 /**
  * EDHREC API response type
@@ -51,17 +59,30 @@ interface EDHRECRequest {
 
 /**
  * Get card recommendations from EDHREC based on a source card and context.
+ * Uses Personalized PageRank to weight cards by their importance relative
+ * to the source card.
  *
  * @param sourceCard - The card to get recommendations for
  * @param context - Array of context cards (neighbors in the graph)
+ * @param graph - The full cube graph (used for PPR calculation)
  * @returns Array of up to 10 recommendations, filtered for commander-only cards
  */
 export async function getRecommendations(
   sourceCard: Card,
-  context: Card[]
+  context: Card[],
+  graph: CubeGraph
 ): Promise<Recommendation[]> {
-  // Build the card names list: source card + context cards
-  const cardNames = [sourceCard.name, ...context.map((c) => c.name)];
+  // Calculate PPR weights for all cards relative to the source
+  const weights = calculatePPRWeights(graph, sourceCard.oracleId);
+
+  // Build card name tuples for weighted expansion
+  const cardNameTuples: Array<[string, string]> = [
+    [sourceCard.oracleId, sourceCard.name],
+    ...context.map((c): [string, string] => [c.oracleId, c.name]),
+  ];
+
+  // Build weighted card names (higher weight = more repetitions)
+  const cardNames = buildWeightedCardNames(cardNameTuples, weights, MAX_CARD_ENTRIES);
 
   // Build the request body
   const requestBody: EDHRECRequest = {
