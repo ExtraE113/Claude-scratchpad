@@ -91,6 +91,7 @@ async function fetchBaselinePage(offset: number): Promise<EDHRECResponse> {
  * @returns Map of card name to baseline score
  */
 async function fetchAllBaselinePages(): Promise<Map<string, number>> {
+  console.log('[BaselineCache] Starting baseline fetch...');
   const cache = new Map<string, number>();
 
   for (let page = 0; page < MAX_PAGES; page++) {
@@ -110,6 +111,7 @@ async function fetchAllBaselinePages(): Promise<Map<string, number>> {
 
       // Stop if no more pages
       if (!data.more) {
+        console.log(`[BaselineCache] Completed at page ${page}, no more pages`);
         break;
       }
     } catch (error) {
@@ -119,6 +121,11 @@ async function fetchAllBaselinePages(): Promise<Map<string, number>> {
     }
   }
 
+  console.log(`[BaselineCache] Fetch complete. Cache size: ${cache.size}`);
+  if (cache.size > 0) {
+    const sample = Array.from(cache.entries()).slice(0, 5);
+    console.log('[BaselineCache] Sample entries:', sample);
+  }
   return cache;
 }
 

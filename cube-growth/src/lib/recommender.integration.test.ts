@@ -13,27 +13,6 @@ import type { Card } from '../types';
 const EDHREC_API_URL = 'https://edhrec.com/api/recs';
 
 /**
- * EDHREC API response type (what we expect)
- */
-interface EDHRECResponse {
-  inRecs: Array<{
-    name: string;
-    oracle_id: string;
-    primary_type: string;
-    score: number;
-    salt: number;
-  }>;
-  outRecs: Array<{
-    name: string;
-    oracle_id: string;
-    primary_type: string;
-    score: number;
-    salt: number;
-  }>;
-  more: boolean;
-}
-
-/**
  * EDHREC request body type
  */
 interface EDHRECRequest {

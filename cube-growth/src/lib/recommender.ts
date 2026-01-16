@@ -124,6 +124,7 @@ export async function getRecommendations(
 
   // Get the baseline cache for score adjustment
   const baselineCache = await getBaselineCache();
+  console.log('[Recommender] Baseline cache size:', baselineCache.size);
 
   // Fetch multiple pages to build a candidate pool
   const candidates = new Map<string, RawRecommendation>();
@@ -167,10 +168,25 @@ export async function getRecommendations(
     }
   }
 
-  // Sort candidates by adjusted score (descending)
-  const sortedCandidates = Array.from(candidates.values()).sort(
-    (a, b) => b.adjustedScore - a.adjustedScore
-  );
+  // Sort candidates by adjusted score (descending) and filter out non-synergistic cards
+  // Cards with score <= 0 are no more synergistic than generic 5-color goodstuff
+  const allCandidates = Array.from(candidates.values());
+  console.log('[Recommender] Total candidates:', allCandidates.length);
+  console.log('[Recommender] Sample candidates (first 5):', allCandidates.slice(0, 5).map(c => ({
+    name: c.name,
+    rawScore: c.rawScore,
+    adjustedScore: c.adjustedScore,
+  })));
+
+  const sortedCandidates = allCandidates
+    .filter((c) => c.adjustedScore > 0)
+    .sort((a, b) => b.adjustedScore - a.adjustedScore);
+
+  console.log('[Recommender] After filter (score > 0):', sortedCandidates.length);
+  console.log('[Recommender] Top 5 after filter:', sortedCandidates.slice(0, 5).map(c => ({
+    name: c.name,
+    adjustedScore: c.adjustedScore,
+  })));
 
   // Get the set of oracle IDs already in context for marking alreadyInGraph
   const contextOracleIds = new Set([

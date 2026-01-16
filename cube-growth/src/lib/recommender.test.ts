@@ -506,19 +506,25 @@ describe('getRecommendations', () => {
     expect(recommendations[1].score).toBe(10);
   });
 
-  it('handles negative adjusted scores', async () => {
+  it('filters out cards with negative or zero adjusted scores', async () => {
     const edhrecResponse = {
       inRecs: [
-        // Card with very high baseline (generic goodstuff)
+        // Card with very high baseline (generic goodstuff) - will have negative adjusted score
         { name: 'Generic Card', oracle_id: 'gen-id', primary_type: 'Artifact', score: 50, salt: 0 },
+        // Card with same baseline as raw - will have zero adjusted score
+        { name: 'Equal Card', oracle_id: 'eq-id', primary_type: 'Artifact', score: 60, salt: 0 },
+        // Card with positive adjusted score - should be included
+        { name: 'Synergy Card', oracle_id: 'syn-id', primary_type: 'Creature', score: 40, salt: 0 },
       ],
       outRecs: [],
       more: false,
     };
 
-    // Baseline has Generic Card with score higher than raw
+    // Baseline: Generic Card has higher baseline, Equal Card has same, Synergy Card has lower
     mockBaselineResponse([
-      { name: 'Generic Card', score: 80 },
+      { name: 'Generic Card', score: 80 },  // 50 - 80 = -30 (filtered)
+      { name: 'Equal Card', score: 60 },    // 60 - 60 = 0 (filtered)
+      { name: 'Synergy Card', score: 10 },  // 40 - 10 = 30 (kept)
     ]);
 
     mockFetch
@@ -526,18 +532,19 @@ describe('getRecommendations', () => {
         ok: true,
         json: async () => edhrecResponse,
       })
-      // Batch fetch
+      // Batch fetch - only Synergy Card should be fetched since others are filtered
       .mockResolvedValueOnce({
         ok: true,
         json: async () => createMockCollectionResponse([
-          { name: 'Generic Card', oracleId: 'generic-oracle-id' },
+          { name: 'Synergy Card', oracleId: 'synergy-oracle-id' },
         ]),
       });
 
     const recommendations = await getRecommendations(sourceCard, []);
 
+    // Only Synergy Card should be returned (others filtered due to non-positive adjusted score)
     expect(recommendations).toHaveLength(1);
-    // Adjusted score should be negative (50 - 80 = -30)
-    expect(recommendations[0].score).toBe(-30);
+    expect(recommendations[0].card.name).toBe('Synergy Card');
+    expect(recommendations[0].score).toBe(30);
   });
 });
