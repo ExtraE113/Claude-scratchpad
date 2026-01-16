@@ -67,9 +67,9 @@ html, body, #root {
   overflow-y: auto;
 }
 
-.sidebar-left {
+.sidebar-middle {
   width: 320px;
-  border-right: 1px solid #2a2a4a;
+  border-left: 1px solid #2a2a4a;
 }
 
 .sidebar-right {
@@ -78,7 +78,7 @@ html, body, #root {
 
 /* Suggestions column - dedicated right column for card recommendations */
 .suggestions-column {
-  width: 380px;
+  width: 420px;
   background-color: #12121f;
 }
 
@@ -114,12 +114,12 @@ html, body, #root {
 
 /* Responsive */
 @media (max-width: 1200px) {
-  .sidebar-left {
+  .sidebar-middle {
     width: 280px;
   }
 
   .suggestions-column {
-    width: 320px;
+    width: 360px;
   }
 }
 
@@ -128,7 +128,7 @@ html, body, #root {
     flex-direction: column;
   }
 
-  .sidebar-left {
+  .sidebar-middle {
     display: none;
   }
 

@@ -22,13 +22,13 @@ function CubeApp() {
       </header>
 
       <main className="app-main">
-        <aside className="sidebar sidebar-left">
-          <CardPanel />
-        </aside>
-
         <div className="graph-container">
           <GraphView />
         </div>
+
+        <aside className="sidebar sidebar-middle">
+          <CardPanel />
+        </aside>
 
         <aside className="sidebar sidebar-right suggestions-column">
           <RecommendationPanel />

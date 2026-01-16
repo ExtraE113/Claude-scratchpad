@@ -130,11 +130,11 @@
   background-color: #b91c1c;
 }
 
-/* Cards Grid - Image-focused layout */
+/* Cards Grid - Single column layout for larger cards */
 .rec-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 /* Individual card */
@@ -176,31 +176,33 @@
   font-size: 32px;
 }
 
-/* Badges */
+/* Badges - positioned to not cover card name */
 .rec-card-score-badge {
   position: absolute;
-  top: 6px;
-  left: 6px;
-  padding: 3px 8px;
-  font-size: 11px;
+  bottom: 8px;
+  left: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
   font-weight: 600;
-  background-color: rgba(59, 130, 246, 0.9);
+  background-color: rgba(59, 130, 246, 0.95);
   color: #fff;
   border-radius: 12px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  z-index: 2;
 }
 
 .rec-card-in-cube-badge {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  padding: 3px 8px;
-  font-size: 10px;
+  bottom: 8px;
+  right: 8px;
+  padding: 4px 10px;
+  font-size: 11px;
   font-weight: 500;
-  background-color: rgba(16, 185, 129, 0.9);
+  background-color: rgba(16, 185, 129, 0.95);
   color: #fff;
   border-radius: 12px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  z-index: 2;
 }
 
 /* Hover overlay */
@@ -209,14 +211,21 @@
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 40px 10px 10px;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.95));
+  padding: 50px 12px 12px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.98));
   opacity: 0;
   transition: opacity 0.2s;
+  z-index: 3;
 }
 
 .rec-card:hover .rec-card-overlay {
   opacity: 1;
+}
+
+/* Hide badges on hover since overlay provides info */
+.rec-card:hover .rec-card-score-badge,
+.rec-card:hover .rec-card-in-cube-badge {
+  opacity: 0;
 }
 
 .rec-card-name {
@@ -309,7 +318,15 @@
 /* Responsive */
 @media (max-width: 900px) {
   .rec-cards-grid {
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 10px;
+    gap: 12px;
+  }
+
+  .rec-card-name {
+    font-size: 14px;
+  }
+
+  .rec-action-btn {
+    padding: 8px 12px;
+    font-size: 12px;
   }
 }
