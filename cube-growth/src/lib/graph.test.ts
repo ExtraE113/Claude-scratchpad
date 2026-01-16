@@ -310,7 +310,7 @@ describe('removeCard()', () => {
   });
 
   it('removes all edges connected to that card', () => {
-    const { graph, center, spokes } = createStarGraph(3);
+    const { graph, center } = createStarGraph(3);
     expect(graph.edges.size).toBe(3);
 
     const newGraph = removeCard(graph, center.oracleId);

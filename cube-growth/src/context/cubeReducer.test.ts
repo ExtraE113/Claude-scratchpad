@@ -3,12 +3,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  cubeReducer,
-  createInitialState,
-  CubeState,
-  CubeAction,
-} from './cubeReducer';
+import { cubeReducer, createInitialState } from './cubeReducer';
+import type { CubeAction } from './cubeReducer';
 import type { Card, Recommendation } from '../types';
 import { makeEdgeKey } from '../types';
 
