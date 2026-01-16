@@ -4,7 +4,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getRecommendations } from './recommender';
-import type { Card } from '../types';
+import type { Card, CubeGraph } from '../types';
+import { createGraph, addCard, addConnection } from './graph';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -34,6 +35,18 @@ function createMockCard(name: string, oracleId: string, oracleText = ''): Card {
   };
 }
 
+// Helper to create a mock graph with cards
+function createMockGraph(cards: Card[], edges: Array<[string, string]> = []): CubeGraph {
+  let graph = createGraph();
+  for (const card of cards) {
+    graph = addCard(graph, card);
+  }
+  for (const [a, b] of edges) {
+    graph = addConnection(graph, a, b);
+  }
+  return graph;
+}
+
 // Helper to create a mock Scryfall response
 function createMockScryfallResponse(name: string, oracleId: string, oracleText = '') {
   return {
@@ -57,6 +70,8 @@ describe('getRecommendations', () => {
   const contextCard = createMockCard('Chain Lightning', 'context-oracle-id', 'Deal 3 damage to any target.');
 
   it('returns filtered recommendations from EDHREC', async () => {
+    const graph = createMockGraph([sourceCard, contextCard], [['source-oracle-id', 'context-oracle-id']]);
+
     const edhrecResponse = {
       inRecs: [
         { name: 'Rift Bolt', oracle_id: 'rec1', primary_type: 'Sorcery', score: 85, salt: 0.1 },
@@ -83,7 +98,7 @@ describe('getRecommendations', () => {
         json: async () => createMockScryfallResponse('Lava Spike', 'lava-spike-id', 'Deal 3 damage'),
       });
 
-    const recommendations = await getRecommendations(sourceCard, [contextCard]);
+    const recommendations = await getRecommendations(sourceCard, [contextCard], graph);
 
     expect(recommendations).toHaveLength(2);
     expect(recommendations[0].card.name).toBe('Rift Bolt');
@@ -93,6 +108,8 @@ describe('getRecommendations', () => {
   });
 
   it('filters out commander-only cards by name', async () => {
+    const graph = createMockGraph([sourceCard]);
+
     const edhrecResponse = {
       inRecs: [
         { name: 'Command Tower', oracle_id: 'ct-id', primary_type: 'Land', score: 99, salt: 0 },
@@ -114,7 +131,7 @@ describe('getRecommendations', () => {
         json: async () => createMockScryfallResponse('Lightning Greaves', 'lg-oracle-id', 'Shroud, Haste'),
       });
 
-    const recommendations = await getRecommendations(sourceCard, []);
+    const recommendations = await getRecommendations(sourceCard, [], graph);
 
     // Command Tower and Arcane Signet should be filtered out
     expect(recommendations).toHaveLength(1);
@@ -122,6 +139,8 @@ describe('getRecommendations', () => {
   });
 
   it('filters out cards with commander text in oracle', async () => {
+    const graph = createMockGraph([sourceCard]);
+
     const edhrecResponse = {
       inRecs: [
         { name: 'Custom Commander Card', oracle_id: 'custom-id', primary_type: 'Creature', score: 95, salt: 0 },
@@ -155,7 +174,7 @@ describe('getRecommendations', () => {
         ),
       });
 
-    const recommendations = await getRecommendations(sourceCard, []);
+    const recommendations = await getRecommendations(sourceCard, [], graph);
 
     // Custom Commander Card should be filtered after oracle text check
     expect(recommendations).toHaveLength(1);
@@ -163,6 +182,8 @@ describe('getRecommendations', () => {
   });
 
   it('filters out cards with command zone text in oracle', async () => {
+    const graph = createMockGraph([sourceCard]);
+
     const edhrecResponse = {
       inRecs: [
         { name: 'Zone Card', oracle_id: 'zone-id', primary_type: 'Creature', score: 95, salt: 0 },
@@ -194,13 +215,15 @@ describe('getRecommendations', () => {
         ),
       });
 
-    const recommendations = await getRecommendations(sourceCard, []);
+    const recommendations = await getRecommendations(sourceCard, [], graph);
 
     expect(recommendations).toHaveLength(1);
     expect(recommendations[0].card.name).toBe('Regular Card');
   });
 
   it('limits recommendations to 10', async () => {
+    const graph = createMockGraph([sourceCard]);
+
     const manyRecs = Array.from({ length: 15 }, (_, i) => ({
       name: `Card ${i + 1}`,
       oracle_id: `oracle-${i + 1}`,
@@ -228,7 +251,7 @@ describe('getRecommendations', () => {
       });
     }
 
-    const recommendations = await getRecommendations(sourceCard, []);
+    const recommendations = await getRecommendations(sourceCard, [], graph);
 
     expect(recommendations).toHaveLength(10);
     expect(recommendations[0].card.name).toBe('Card 1');
@@ -236,24 +259,30 @@ describe('getRecommendations', () => {
   });
 
   it('handles EDHREC API errors', async () => {
+    const graph = createMockGraph([sourceCard]);
+
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 500,
       statusText: 'Internal Server Error',
     });
 
-    await expect(getRecommendations(sourceCard, [])).rejects.toThrow(
+    await expect(getRecommendations(sourceCard, [], graph)).rejects.toThrow(
       'EDHREC request failed: 500 Internal Server Error'
     );
   });
 
   it('handles network errors', async () => {
+    const graph = createMockGraph([sourceCard]);
+
     mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
-    await expect(getRecommendations(sourceCard, [])).rejects.toThrow('Network error');
+    await expect(getRecommendations(sourceCard, [], graph)).rejects.toThrow('Network error');
   });
 
   it('skips cards that fail to fetch from Scryfall', async () => {
+    const graph = createMockGraph([sourceCard]);
+
     const edhrecResponse = {
       inRecs: [
         { name: 'Failing Card', oracle_id: 'fail-id', primary_type: 'Creature', score: 95, salt: 0 },
@@ -283,7 +312,7 @@ describe('getRecommendations', () => {
         json: async () => createMockScryfallResponse('Working Card', 'working-oracle-id'),
       });
 
-    const recommendations = await getRecommendations(sourceCard, []);
+    const recommendations = await getRecommendations(sourceCard, [], graph);
 
     expect(recommendations).toHaveLength(1);
     expect(recommendations[0].card.name).toBe('Working Card');
@@ -293,6 +322,8 @@ describe('getRecommendations', () => {
   });
 
   it('sets alreadyInGraph correctly for source card', async () => {
+    const graph = createMockGraph([sourceCard]);
+
     const edhrecResponse = {
       inRecs: [
         { name: 'Lightning Bolt', oracle_id: 'source-oracle-id', primary_type: 'Instant', score: 95, salt: 0 },
@@ -328,7 +359,7 @@ describe('getRecommendations', () => {
         json: async () => createMockScryfallResponse('New Card', 'new-oracle-id'),
       });
 
-    const recommendations = await getRecommendations(sourceCard, []);
+    const recommendations = await getRecommendations(sourceCard, [], graph);
 
     // Lightning Bolt should be marked as already in graph
     const boltRec = recommendations.find(r => r.card.name === 'Lightning Bolt');
@@ -339,6 +370,8 @@ describe('getRecommendations', () => {
   });
 
   it('sets alreadyInGraph correctly for context cards', async () => {
+    const graph = createMockGraph([sourceCard, contextCard], [['source-oracle-id', 'context-oracle-id']]);
+
     const edhrecResponse = {
       inRecs: [
         { name: 'Chain Lightning', oracle_id: 'context-oracle-id', primary_type: 'Sorcery', score: 95, salt: 0 },
@@ -374,7 +407,7 @@ describe('getRecommendations', () => {
         json: async () => createMockScryfallResponse('Fresh Card', 'fresh-oracle-id'),
       });
 
-    const recommendations = await getRecommendations(sourceCard, [contextCard]);
+    const recommendations = await getRecommendations(sourceCard, [contextCard], graph);
 
     const chainRec = recommendations.find(r => r.card.name === 'Chain Lightning');
     const freshRec = recommendations.find(r => r.card.name === 'Fresh Card');
@@ -383,7 +416,10 @@ describe('getRecommendations', () => {
     expect(freshRec?.alreadyInGraph).toBe(false);
   });
 
-  it('sends correct request body to EDHREC API', async () => {
+  it('sends weighted request body to EDHREC API', async () => {
+    // Create a graph with source connected to context
+    const graph = createMockGraph([sourceCard, contextCard], [['source-oracle-id', 'context-oracle-id']]);
+
     const edhrecResponse = {
       inRecs: [],
       outRecs: [],
@@ -395,26 +431,35 @@ describe('getRecommendations', () => {
       json: async () => edhrecResponse,
     });
 
-    await getRecommendations(sourceCard, [contextCard]);
+    await getRecommendations(sourceCard, [contextCard], graph);
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/edhrec/recs', {
+    // Check that fetch was called with weighted card names
+    expect(mockFetch).toHaveBeenCalledWith('/api/edhrec/recs', expect.objectContaining({
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        cards: ['Lightning Bolt', 'Chain Lightning'],
-        commanders: ['Kenrith, the Returned King'],
-        name: '',
-        options: {
-          excludeLands: false,
-          offset: 0,
-        },
-      }),
-    });
+    }));
+
+    // Parse the body to check the cards array
+    const callArgs = mockFetch.mock.calls[0];
+    const body = JSON.parse(callArgs[1].body);
+
+    // Source card should appear multiple times (weight 10)
+    const sourceCount = body.cards.filter((n: string) => n === 'Lightning Bolt').length;
+    expect(sourceCount).toBe(10);
+
+    // Context card should also appear multiple times (connected, so high weight)
+    const contextCount = body.cards.filter((n: string) => n === 'Chain Lightning').length;
+    expect(contextCount).toBeGreaterThanOrEqual(1);
+
+    // Should include the commander
+    expect(body.commanders).toEqual(['Kenrith, the Returned King']);
   });
 
   it('handles empty inRecs array', async () => {
+    const graph = createMockGraph([sourceCard]);
+
     const edhrecResponse = {
       inRecs: [],
       outRecs: [
@@ -428,7 +473,7 @@ describe('getRecommendations', () => {
       json: async () => edhrecResponse,
     });
 
-    const recommendations = await getRecommendations(sourceCard, []);
+    const recommendations = await getRecommendations(sourceCard, [], graph);
 
     // Should only process inRecs, not outRecs
     expect(recommendations).toHaveLength(0);

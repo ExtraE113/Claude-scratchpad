@@ -159,7 +159,7 @@ export function CubeProvider({ children }: CubeProviderProps) {
     try {
       // Build context and fetch recommendations
       const contextCards = buildContextCards(graph, selectedCardId);
-      const recommendations = await getRecommendations(selectedCard, contextCards);
+      const recommendations = await getRecommendations(selectedCard, contextCards, graph);
 
       // Update recommendations in state
       dispatch({ type: 'SET_RECOMMENDATIONS', payload: recommendations });
