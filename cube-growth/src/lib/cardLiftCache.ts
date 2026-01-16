@@ -100,10 +100,16 @@ async function fetchCardLiftData(cardName: string): Promise<CardLiftEntry[]> {
 
     const data: EDHRECCardResponse = await response.json();
 
+    // Debug: log raw response structure
+    console.log(`[CardLiftCache] Raw response for "${cardName}":`, JSON.stringify(data).slice(0, 500));
+
     // Handle both nested (container.json_dict.cardlists) and flat (cardlists) structures
     const cardlists = data.container?.json_dict?.cardlists ?? data.cardlists ?? [];
 
     console.log(`[CardLiftCache] Response keys for "${cardName}":`, Object.keys(data));
+    console.log(`[CardLiftCache] Has container?`, !!data.container);
+    console.log(`[CardLiftCache] Has container.json_dict?`, !!data.container?.json_dict);
+    console.log(`[CardLiftCache] Has container.json_dict.cardlists?`, !!data.container?.json_dict?.cardlists);
     console.log(`[CardLiftCache] Cardlists found: ${cardlists.length}`);
     if (cardlists.length > 0) {
       for (const cl of cardlists.slice(0, 3)) {
