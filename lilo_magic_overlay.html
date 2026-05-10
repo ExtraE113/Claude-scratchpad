@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <title>Lilo, Escape Artist — Magic Templating</title>
+
+<!-- Real MTG mana symbols (Andrew Gioia's Mana font - same one Scryfall uses) -->
+<link href="assets/mana-font/css/mana.css" rel="stylesheet">
+
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -16,15 +20,14 @@
     align-items: center;
     justify-content: center;
     padding: 28px 16px;
-    font-family: 'Beleren', 'Matrix Bold', Georgia, serif;
+    font-family: Georgia, 'Times New Roman', serif;
     color: #e8e1c8;
   }
 
   h1 {
-    font-family: 'Beleren', Georgia, serif;
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 500;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.2em;
     text-transform: uppercase;
     color: #b9a86a;
     margin-bottom: 18px;
@@ -34,7 +37,7 @@
   .card-wrap {
     position: relative;
     width: min(520px, 95vw);
-    aspect-ratio: 5 / 7;
+    aspect-ratio: 717 / 1000;
     border-radius: 22px;
     overflow: hidden;
     box-shadow:
@@ -54,199 +57,181 @@
     pointer-events: none;
   }
 
-  /* All overlays positioned in % so they scale with the card */
   .ovl { position: absolute; z-index: 5; }
 
-  /* ===== MANA COST (top-left) ===== */
-  /* Original ink-cost circle sits at ~3% in from corners. Stack pips vertically. */
-  .mana-cost {
-    top: 2.6%;
-    left: 2.6%;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    z-index: 7;
-  }
-  .pip {
-    width: 38px;
-    height: 38px;
-    border-radius: 50%;
-    border: 1.6px solid #141414;
+  /* ===== MANA COST (top-left, covering Lorcana ink-cost circle) ===== */
+  .mana-cost-wrap {
+    top: 1.6%;
+    left: 1.6%;
+    width: 13.5%;
+    aspect-ratio: 1 / 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'Beleren', Georgia, serif;
-    font-weight: 700;
-    font-size: 22px;
-    color: #141414;
+    z-index: 7;
+  }
+  .mana-cost-wrap::before {
+    content: "";
+    position: absolute;
+    inset: 4%;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 50% 50%,
+        rgba(20, 20, 30, 0.92) 0%,
+        rgba(10, 10, 18, 0.96) 70%,
+        rgba(5, 5, 10, 0.98) 100%);
     box-shadow:
-      inset -2px -3px 5px rgba(0,0,0,0.38),
-      inset 2px 2px 3px rgba(255,255,255,0.55),
-      0 1.5px 2.5px rgba(0,0,0,0.65);
-    text-shadow: 0 1px 0 rgba(255,255,255,0.55);
-    line-height: 1;
+      0 0 0 2px rgba(0,0,0,0.7),
+      0 2px 5px rgba(0,0,0,0.7);
+    z-index: 0;
   }
-  .pip.gen { background: radial-gradient(circle at 30% 28%, #f3ecdc, #b3aa92); }
-  .pip.white {
-    background: radial-gradient(circle at 30% 28%, #fff8e3, #efd99c);
-    font-size: 0;
+  .mana-cost {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    z-index: 1;
   }
-  .pip.white::before {
-    content: "☀";
-    font-size: 24px;
-    color: #141414;
-    line-height: 1;
+  .mana-cost .ms.ms-cost {
+    font-size: 26px;
+    box-shadow:
+      0 1.5px 2.5px rgba(0,0,0,0.65),
+      inset 0 1px 1.5px rgba(255,255,255,0.4);
   }
 
-  /* ===== TITLE PLATE (covers "LILO / Escape Artist") ===== */
+  /* ===== TITLE PLATE — covers both "LILO" + "Escape Artist" rows ===== */
   .title-plate {
-    top: 56.4%;
+    top: 54.6%;
     left: 3%;
-    width: 64%;
-    height: 6.4%;
+    width: 60%;
+    height: 14%;
     background:
       linear-gradient(to bottom, #f8edc9 0%, #ecdba0 55%, #d6c184 100%);
-    border: 1.3px solid #1a1a1a;
+    border: 1.4px solid #1a1a1a;
     border-radius: 4px;
     box-shadow:
-      0 1px 3px rgba(0,0,0,0.5),
+      0 1.5px 3px rgba(0,0,0,0.55),
       inset 0 1px 1.5px rgba(255,255,255,0.65),
       inset 0 -1px 0 rgba(0,0,0,0.15);
     display: flex;
     align-items: center;
-    padding: 0 14px;
-    font-family: 'Beleren', Georgia, serif;
-    font-weight: 700;
-    font-size: 19px;
+    justify-content: flex-start;
+    padding: 0 16px;
     color: #141414;
+  }
+  .title-plate .name {
+    font-family: 'Beleren Bold', 'Trajan Pro', Georgia, serif;
+    font-weight: 800;
+    font-size: 23px;
     letter-spacing: 0.4px;
+    line-height: 1.05;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.5);
     white-space: nowrap;
     overflow: hidden;
-    text-shadow: 0 1px 0 rgba(255,255,255,0.4);
+    text-overflow: ellipsis;
   }
 
-  /* ===== P/T BOX (covers strength/willpower shields) ===== */
+  /* ===== P/T BOX — covers both 1 / 2 stat shields ===== */
   .pt-box {
-    top: 57.4%;
+    top: 56%;
     right: 3%;
-    width: 22.5%;
-    height: 6.6%;
+    width: 28%;
+    height: 13%;
     background:
       linear-gradient(to bottom, #f8edc9 0%, #ecdba0 55%, #d6c184 100%);
-    border: 1.4px solid #141414;
-    border-radius: 5px;
+    border: 1.5px solid #141414;
+    border-radius: 6px;
     box-shadow:
-      0 1.5px 3px rgba(0,0,0,0.55),
+      0 2px 4px rgba(0,0,0,0.6),
       inset 0 1px 1.5px rgba(255,255,255,0.6),
-      inset 0 -1px 0 rgba(0,0,0,0.15);
+      inset 0 -1px 0 rgba(0,0,0,0.18);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'Beleren', Georgia, serif;
+    font-family: 'Beleren Bold', 'Trajan Pro', Georgia, serif;
     font-weight: 800;
-    font-size: 24px;
+    font-size: 26px;
     color: #141414;
-    letter-spacing: 0.5px;
+    letter-spacing: 1px;
     text-shadow: 0 1px 0 rgba(255,255,255,0.45);
   }
 
-  /* ===== TYPE LINE (covers "Storyborn • Hero") ===== */
+  /* ===== TYPE LINE — covers class icon + "Storyborn • Hero" ===== */
   .type-line {
-    top: 64.4%;
+    top: 68.7%;
     left: 3%;
     right: 3%;
-    height: 4.6%;
+    height: 5.6%;
     background:
       linear-gradient(to bottom, #f8edc9 0%, #ecdba0 55%, #d6c184 100%);
-    border: 1.3px solid #1a1a1a;
+    border: 1.4px solid #1a1a1a;
     border-radius: 3px;
     box-shadow:
-      0 1px 2.5px rgba(0,0,0,0.45),
+      0 1.5px 3px rgba(0,0,0,0.5),
       inset 0 1px 1px rgba(255,255,255,0.55);
     display: flex;
     align-items: center;
     padding: 0 12px;
-    font-family: 'Beleren', Georgia, serif;
+    font-family: 'Beleren Bold', 'Trajan Pro', Georgia, serif;
     font-weight: 700;
-    font-size: 13px;
+    font-size: 14px;
     color: #141414;
     letter-spacing: 0.2px;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.35);
   }
   .set-symbol {
     margin-left: auto;
-    width: 22px;
-    height: 22px;
-    background:
-      radial-gradient(circle at 30% 25%, #ffe89a, #b88a1e 70%, #6a4c0d);
-    clip-path: polygon(50% 4%, 95% 50%, 50% 96%, 5% 50%);
-    border: 1px solid #4a3308;
-    box-shadow: 0 1px 1.5px rgba(0,0,0,0.4);
+    width: 20px;
+    height: 20px;
+    background: radial-gradient(circle at 32% 28%, #fff0b8 0%, #d49b1a 55%, #6e4309 100%);
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    filter: drop-shadow(0 1px 1.5px rgba(0,0,0,0.6));
   }
 
-  /* ===== RULES TEXT BOX (covers ability text + flavor) ===== */
+  /* ===== RULES TEXT BOX ===== */
   .rules-box {
-    top: 69.6%;
+    top: 74.5%;
     left: 3%;
     right: 3%;
-    height: 22.8%;
+    height: 18.6%;
     background:
       linear-gradient(to bottom, rgba(248, 237, 201, 0.985) 0%, rgba(232, 217, 168, 0.985) 100%);
-    border: 1.3px solid #1a1a1a;
-    padding: 9px 12px 7px 12px;
-    font-family: 'Garamond', 'Adobe Garamond Pro', 'Times New Roman', serif;
-    font-size: 12.2px;
+    border: 1.4px solid #1a1a1a;
+    padding: 8px 36px 6px 12px;
+    font-family: 'MPlantin', 'Adobe Garamond Pro', Garamond, 'Times New Roman', serif;
+    font-size: 11.7px;
     color: #141414;
     line-height: 1.32;
     overflow: hidden;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.5);
+    box-shadow: 0 1.5px 3px rgba(0,0,0,0.45), inset 0 1px 1px rgba(255,255,255,0.5);
   }
-  .rules-box p { margin-bottom: 6px; }
+  .rules-box p { margin-bottom: 5px; }
   .rules-box p:last-child { margin-bottom: 0; }
-  .ability-name { font-weight: 700; font-style: italic; }
+  .ability-name { font-weight: 700; font-style: italic; font-family: 'MPlantin', Georgia, serif; }
   .reminder { font-style: italic; color: #4a4536; }
   .keyword { font-style: italic; }
   .flavor-divider {
     height: 1px;
     background: linear-gradient(to right, transparent, rgba(0,0,0,0.45) 18%, rgba(0,0,0,0.45) 82%, transparent);
-    margin: 6px 6px 5px 6px;
+    margin: 5px -24px 4px 6px; /* negative right margin to span past the lore-badge gutter */
   }
-  .flavor { font-style: italic; color: #2a2618; font-size: 11.5px; }
+  .flavor {
+    font-style: italic;
+    color: #2a2618;
+    font-size: 11.3px;
+    margin-right: -24px; /* same: flavor line uses full inner width below the lore badge */
+  }
 
-  /* ===== Inline mana / tap symbols ===== */
-  .ms {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 13px;
-    height: 13px;
-    border-radius: 50%;
-    border: 1px solid #141414;
-    font-family: 'Beleren', Georgia, serif;
-    font-weight: 700;
-    font-size: 9.5px;
-    color: #141414;
-    vertical-align: -2px;
-    margin: 0 1px;
-    box-shadow:
-      inset -1px -1.2px 1.8px rgba(0,0,0,0.3),
-      inset 1px 1px 1.5px rgba(255,255,255,0.45);
-    line-height: 1;
-  }
-  .ms.gen   { background: radial-gradient(circle at 30% 28%, #f3ecdc, #b3aa92); }
-  .ms.white { background: radial-gradient(circle at 30% 28%, #fff8e3, #efd99c); font-size: 0; }
-  .ms.white::before { content: "☀"; font-size: 11px; color: #141414; line-height: 1; }
-  .ms.colorless { background: radial-gradient(circle at 30% 28%, #d8d2c0, #8a8270); color: #fff; }
-  .ms.tap {
-    background: radial-gradient(circle at 30% 28%, #d8d2c0, #6a6258);
-    color: #fff;
-    font-size: 0;
-  }
-  .ms.tap::before { content: "↷"; font-size: 12px; color: #fff; line-height: 1; font-weight: 700; }
+  /* Inline mana symbols inside the rules box */
+  .rules-box .ms,
+  .legend .ms { font-size: 10.5px; vertical-align: -1px; }
+  .rules-box .ms.ms-cost,
+  .legend .ms.ms-cost { font-size: 10.5px; }
 
-  /* ===== Quest/Lore badge (right of rules box, where lore icon sits) ===== */
-  .quest-badge {
-    top: 76.6%;
-    right: 4.5%;
+  /* ===== Lore badge (the diamond on the right side of the rules box) ===== */
+  .lore-badge {
+    top: 80.5%;
+    right: 5.2%;
     width: 26px;
     height: 30px;
     background:
@@ -258,24 +243,25 @@
     color: #2a1c0a;
     font-weight: 800;
     font-size: 15px;
-    font-family: 'Beleren', Georgia, serif;
+    font-family: 'Beleren Bold', Georgia, serif;
     z-index: 6;
     text-shadow: 0 1px 0 rgba(255,255,255,0.45);
     filter: drop-shadow(0 1.5px 1.5px rgba(0,0,0,0.55));
   }
 
-  /* ===== Bottom info bar (replace artist/copyright with MTG-ish credit line) ===== */
+  /* ===== Bottom strip — fully cover the Lorcana credits ===== */
   .bottom-mask {
     bottom: 0;
     left: 0;
     right: 0;
-    height: 5.6%;
+    height: 7.2%;
     background:
-      linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.55) 70%, rgba(0,0,0,0) 100%);
+      linear-gradient(to bottom, #1a1a1a 0%, #0d0d0d 100%);
     z-index: 4;
+    border-top: 1px solid #000;
   }
   .bottom-info {
-    bottom: 0.7%;
+    bottom: 1.4%;
     left: 3.2%;
     right: 3.2%;
     display: flex;
@@ -283,13 +269,14 @@
     align-items: center;
     color: #f0e7c8;
     font-size: 9.5px;
-    font-family: 'Beleren', Arial, sans-serif;
+    font-family: 'Beleren Bold', Arial, sans-serif;
     font-weight: 600;
     letter-spacing: 0.3px;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.95);
+    text-shadow: 0 1px 1.5px rgba(0,0,0,0.95);
     z-index: 5;
   }
-  .bottom-info .left  { display: flex; align-items: center; gap: 6px; }
+  .bottom-info .left,
+  .bottom-info .right { display: flex; align-items: center; gap: 6px; }
   .bottom-info .brush {
     display: inline-block;
     width: 11px;
@@ -297,6 +284,11 @@
     background: #f0e7c8;
     clip-path: polygon(0 65%, 60% 65%, 60% 40%, 80% 40%, 80% 30%, 100% 50%, 80% 70%, 80% 60%, 60% 60%, 60% 100%, 0 100%);
     transform: rotate(-12deg);
+  }
+  .bottom-info .copyright {
+    font-size: 8px;
+    opacity: 0.75;
+    letter-spacing: 0.1px;
   }
 
   /* ===== Translation legend below the card ===== */
@@ -307,14 +299,13 @@
     background: rgba(20, 20, 30, 0.55);
     border: 1px solid rgba(185, 168, 106, 0.25);
     border-radius: 10px;
-    font-family: 'Garamond', 'Times New Roman', serif;
+    font-family: Georgia, 'Times New Roman', serif;
     color: #d8d0b4;
     font-size: 12.5px;
     line-height: 1.5;
   }
   .legend h2 {
-    font-family: 'Beleren', Georgia, serif;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.18em;
     text-transform: uppercase;
@@ -332,21 +323,25 @@
   <h1>Lilo, Escape Artist · Magic Templating Overlay</h1>
 
   <div class="card-wrap">
-    <img class="bg" src="https://tcgplayer-cdn.tcgplayer.com/product/592015_in_1000x1000.jpg" alt="Lilo, Escape Artist">
+    <img class="bg" src="assets/lilo.jpg" alt="Lilo, Escape Artist">
 
-    <!-- Mana cost (replaces ink cost; inkable property is preserved via the Inkwell keyword in the rules text) -->
-    <div class="ovl mana-cost">
-      <div class="pip gen">1</div>
-      <div class="pip white"></div>
+    <!-- Mana cost: real MTG pips, sitting inside a dark medallion that fully replaces the Lorcana ink-cost circle -->
+    <div class="ovl mana-cost-wrap">
+      <div class="mana-cost">
+        <i class="ms ms-1 ms-cost ms-shadow"></i>
+        <i class="ms ms-w ms-cost ms-shadow"></i>
+      </div>
     </div>
 
-    <!-- Title plate -->
-    <div class="ovl title-plate">Lilo, Escape Artist</div>
+    <!-- Title plate (covers LILO + Escape Artist) -->
+    <div class="ovl title-plate">
+      <div class="name">Lilo, Escape Artist</div>
+    </div>
 
-    <!-- P/T (1 strength / 2 willpower → 1/2) -->
+    <!-- P/T -->
     <div class="ovl pt-box">1 / 2</div>
 
-    <!-- Type line -->
+    <!-- Type line (covers class icon + Storyborn • Hero) -->
     <div class="ovl type-line">
       <span>Legendary Creature — Human Hero</span>
       <span class="set-symbol" title="Set symbol"></span>
@@ -356,26 +351,26 @@
     <div class="ovl rules-box">
       <p>
         <span class="ability-name">Inkwell</span>
-        <span class="reminder">(You may play this card face down. If you do, it&rsquo;s a colorless land with &ldquo;<span class="ms tap"></span>: Add <span class="ms colorless">C</span>.&rdquo; and has no other characteristics.)</span>
+        <span class="reminder">(You may play this card face down. If you do, it&rsquo;s a colorless land with &ldquo;<i class="ms ms-tap ms-cost"></i>: Add <i class="ms ms-c ms-cost"></i>.&rdquo; and has no other characteristics.)</span>
       </p>
       <p>
-        <span class="ability-name">No Place I&rsquo;d Rather Be</span> &mdash; At the beginning of your upkeep, if Lilo, Escape Artist is in your graveyard, you may pay <span class="ms gen">1</span><span class="ms white"></span>. If you do, return her to the battlefield tapped.
+        <span class="ability-name">No Place I&rsquo;d Rather Be</span> &mdash; At the beginning of your upkeep, if Lilo, Escape Artist is in your graveyard, you may pay <i class="ms ms-1 ms-cost"></i><i class="ms ms-w ms-cost"></i>. If you do, return her to the battlefield tapped.
       </p>
       <p>
-        <span class="ms tap"></span>: You gain 2 life. Activate only as a sorcery.
+        <i class="ms ms-tap ms-cost"></i>: You gain 2 life. Activate only as a sorcery.
       </p>
       <div class="flavor-divider"></div>
       <p class="flavor">&ldquo;You can&rsquo;t keep me away from the fun!&rdquo;</p>
     </div>
 
-    <!-- Quest/lore badge (the diamond on the right of the rules box - 2 lore in source) -->
-    <div class="ovl quest-badge">2</div>
+    <!-- Lore badge -->
+    <div class="ovl lore-badge">2</div>
 
-    <!-- Bottom credit line -->
+    <!-- Bottom credits -->
     <div class="ovl bottom-mask"></div>
     <div class="ovl bottom-info">
       <span class="left"><span class="brush"></span>Grzegorz Krysiński</span>
-      <span>2/204 · EN · 6</span>
+      <span class="right copyright">2/204 · EN · Lorcana</span>
     </div>
   </div>
 
@@ -384,7 +379,7 @@
     <table>
       <tr>
         <td>2 Ink (inkable)</td>
-        <td>Mana cost <strong>{1}{W}</strong> with the <em>Inkwell</em> keyword — face-down play as a colorless <em>{T}: Add {C}</em> land is intact.</td>
+        <td>Mana cost <i class="ms ms-1 ms-cost"></i><i class="ms ms-w ms-cost"></i> with the <em>Inkwell</em> keyword — face-down play as a colorless <em><i class="ms ms-tap ms-cost"></i>: Add <i class="ms ms-c ms-cost"></i></em> land is intact.</td>
       </tr>
       <tr>
         <td>1 Strength / 2 Willpower</td>
@@ -392,15 +387,15 @@
       </tr>
       <tr>
         <td>Storyborn · Hero</td>
-        <td><strong>Legendary Creature — Human Hero</strong> (Storyborn ≈ legendary; uniqueness rule.)</td>
+        <td><strong>Legendary Creature — Human Hero</strong>.</td>
       </tr>
       <tr>
         <td>No Place I&rsquo;d Rather Be</td>
-        <td>Triggered upkeep ability returns her from graveyard tapped, paying her cost — same shape as the Lorcana discard-recursion-into-exerted effect.</td>
+        <td>Triggered upkeep ability returns her from graveyard tapped, paying her cost.</td>
       </tr>
       <tr>
         <td>2 Lore (quest)</td>
-        <td>Sorcery-speed <strong>{T}: You gain 2 life</strong> — mirrors questing for 2 lore each turn.</td>
+        <td>Sorcery-speed <i class="ms ms-tap ms-cost"></i>: gain 2 life, mirroring questing for 2 lore.</td>
       </tr>
     </table>
   </div>
