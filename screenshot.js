@@ -34,7 +34,12 @@ const path = require('path');
 
   const target = await page.$(cropTo);
   if (target) {
-    await target.screenshot({ path: out.replace(/\.png$/, '_card.png') });
+    const box = await target.boundingBox();
+    console.log('clip box:', box);
+    await page.screenshot({
+      path: out.replace(/\.png$/, '_card.png'),
+      clip: { x: box.x, y: box.y, width: box.width, height: box.height },
+    });
   }
   await page.screenshot({ path: out, fullPage: true });
 

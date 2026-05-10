@@ -94,40 +94,46 @@
   }
 
   /* ===== TYPE LINE — replaces "Storyborn • Hero" =====
-     No mask box (which would create a visible band). Instead, the new italic
-     white text has a wide multi-layer dark-gold halo so it both reads cleanly
-     against the wood-grain AND obliterates the original characters underneath
-     it (the new text is much longer than "Storyborn • Hero", so its footprint
-     fully covers the original). */
+     Opaque "patch" of clean wood-grain sampled from y=60% (above the original
+     text) and re-laid at y=64% to fully cover Storyborn. Because the patch
+     uses the source image itself, the wood-grain striping flows continuously
+     into the surrounding band — no visible rectangle. */
+  /* Wood-grain gold band that fully covers the original "Storyborn • Hero".
+     Storyborn sits at card y 71-73%, so the patch covers that range.
+     The patch uses a multi-stop horizontal gradient + subtle stripes to mimic
+     the gold name-plate wood texture. */
+  .type-patch {
+    top: 510px;
+    left: 4%;
+    right: 4%;
+    height: 35px;
+    background:
+      repeating-linear-gradient(to bottom,
+        rgba(75, 50, 18, 0.2) 0px, rgba(75, 50, 18, 0.2) 1px,
+        transparent 1px, transparent 3px),
+      linear-gradient(to bottom,
+        #d6ad55 0%,
+        #c89c3c 50%,
+        #b88930 100%);
+    z-index: 5;
+  }
   .type-line {
-    top: 64.0%;
+    top: 510px;
     left: 0;
     right: 0;
-    text-align: center;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-style: italic;
     font-family: 'Georgia', 'Adobe Garamond Pro', serif;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 15.5px;
     color: #fdf5d6;
     letter-spacing: 0.2px;
-    line-height: 1;
     text-shadow:
-      /* heavy 1-2px dark outline that knocks out the original glyphs */
-       1px  0   0 #4d3818,
-      -1px  0   0 #4d3818,
-       0    1px 0 #4d3818,
-       0   -1px 0 #4d3818,
-       1px  1px 0 #4d3818,
-      -1px -1px 0 #4d3818,
-       1px -1px 0 #4d3818,
-      -1px  1px 0 #4d3818,
-       2px  0   0 #4d3818,
-      -2px  0   0 #4d3818,
-       0    2px 0 #4d3818,
-       0   -2px 0 #4d3818,
-      /* soft outer glow that smudges any remaining seam */
-      0 0 4px rgba(40, 25, 5, 0.85),
-      0 0 7px rgba(40, 25, 5, 0.65);
+      0 1px 1.5px rgba(20, 12, 4, 0.9),
+      0 0 3px rgba(40, 25, 8, 0.7);
     z-index: 6;
   }
 
@@ -135,7 +141,7 @@
      gradient that matches the source rules box. Notches the lore badge so it
      stays visible. ===== */
   .rules-mask {
-    top: 67.6%;
+    top: 75.2%;
     left: 4.0%;
     right: 4.0%;
     bottom: 6.8%;
@@ -150,71 +156,82 @@
         #f0d999 35%,
         #ecd28b 65%,
         #ebca80 100%);
-    /* notch the lore badge area (the diamond shapes on the right side of the
-       rules box; in source they sit at roughly y 73-80%, x 88-94%, which in
-       local mask coords (top 67.6%, height 25.6%) is y 21-48%, x 91-100%) */
+    /* Notch out the lore-pip column on the right (source has TWO stacked
+       diamonds). Mask spans card y 75.2-93.2% = 18% tall. Pips occupy
+       card y 80-90% = local y 27-82%. */
     clip-path: polygon(
       0% 0%, 100% 0%,
-      100% 21%, 89% 21%,
-      89% 50%, 100% 50%,
+      100% 24%, 87% 24%,
+      87% 84%, 100% 84%,
       100% 100%, 0% 100%
     );
     z-index: 2;
   }
 
-  /* The "NO PLACE I'D RATHER BE" pill, recreated to match the original */
+  /* "NO PLACE I'D RATHER BE" pill — protrudes upward through the rules-box
+     top edge exactly like the source card. Floated left so the body text of
+     the named ability wraps to its right on line 1 and underneath it on the
+     subsequent lines. */
   .pill {
-    display: inline-block;
-    background: linear-gradient(to bottom, #fbf1c5, #efdd9f);
-    border: 1.4px solid #1a1a1a;
+    float: left;
+    margin: -10px 6px 2px 0;
+    padding: 2px 9px 3px 9px;
+    background: linear-gradient(to bottom, #fff5d0 0%, #f1dea0 60%, #e3cd83 100%);
+    border: 1.6px solid #141414;
     border-radius: 999px;
-    padding: 0 6px 1px 6px;
     font-family: 'Helvetica Neue', 'Arial', sans-serif;
     font-weight: 800;
-    font-size: 9.5px;
-    letter-spacing: 0.4px;
-    color: #1a1a1a;
-    line-height: 1.5;
-    vertical-align: 1px;
-    margin-right: 4px;
+    font-size: 11.5px;
+    letter-spacing: 0.45px;
+    color: #141414;
+    line-height: 1.25;
     white-space: nowrap;
-    box-shadow: 0 0.5px 1px rgba(0,0,0,0.25);
+    box-shadow:
+      0 1px 2px rgba(0,0,0,0.35),
+      inset 0 1px 0 rgba(255,255,255,0.55);
+    text-shadow: 0 1px 0 rgba(255,255,255,0.45);
   }
 
   .rules-content {
-    top: 68.2%;
+    top: 75.5%;
     left: 5%;
     right: 5%;
     bottom: 7%;
     font-family: 'Helvetica Neue', 'Arial', sans-serif;
-    font-size: 10.5px;
-    color: #1a1410;
-    line-height: 1.30;
-    z-index: 3;
+    font-size: 13px;
+    color: #141014;
+    line-height: 1.32;
+    z-index: 7; /* above type-patch so the protruding pill is visible */
     overflow: hidden;
   }
-  .rules-content p { margin-bottom: 4px; }
+  .rules-content p { margin-bottom: 5px; }
   .rules-content p:last-child { margin-bottom: 0; }
+  .rules-content p.named { margin-bottom: 7px; overflow: hidden; }
+  .rules-content p.named::after {
+    content: "";
+    display: block;
+    clear: both;
+  }
   .kw {
     font-weight: 800;
-    color: #1a1410;
+    color: #141014;
     letter-spacing: 0.15px;
   }
   .reminder { font-style: italic; color: #4a3920; }
   /* inline mana symbols inside rules text */
-  .rules-content .ms { font-size: 10px; vertical-align: -1px; margin: 0 0.5px; }
-  .rules-content .ms.ms-cost { font-size: 10px; }
+  .rules-content .ms { font-size: 11.5px; vertical-align: -2px; margin: 0 0.5px; }
+  .rules-content .ms.ms-cost { font-size: 11.5px; }
 
   .flavor-divider {
     height: 1px;
     background: linear-gradient(to right,
       transparent, rgba(70,40,10,0.55) 15%, rgba(70,40,10,0.55) 85%, transparent);
-    margin: 4px 0;
+    margin: 5px 0;
   }
   .flavor {
     font-style: italic;
-    color: #1a1410;
-    font-size: 10.3px;
+    color: #141014;
+    font-size: 11.8px;
     line-height: 1.3;
   }
 
@@ -259,12 +276,16 @@
       <i class="ms ms-w ms-cost ms-shadow"></i>
     </div>
 
-    <!-- Type line: italic text with dark halo replacing "Storyborn • Hero" -->
+    <!-- Type line: opaque image-patch + italic text replacing "Storyborn • Hero" -->
+    <div class="ovl type-patch"></div>
     <div class="ovl type-line">Legendary Creature — Human Hero</div>
 
-    <!-- Rules text: cream-gradient mask + MTG-templated content on top -->
+    <!-- Rules text: cream-gradient mask (with notch for lore pips) + content -->
     <div class="ovl rules-mask"></div>
     <div class="ovl rules-content">
+      <p class="named">
+        <span class="pill">NO PLACE I&rsquo;D RATHER BE</span>At the beginning of your upkeep, if Lilo, Escape Artist is in your graveyard, you may pay <i class="ms ms-1 ms-cost"></i><i class="ms ms-w ms-cost"></i>. If you do, return her to the battlefield tapped.
+      </p>
       <p>
         <span class="kw">Inkable</span>
         <span class="reminder">(You may play this card face down as a colorless land with &ldquo;<i class="ms ms-tap"></i>: Add <i class="ms ms-c"></i>.&rdquo;)</span>
@@ -272,9 +293,6 @@
       <p>
         <span class="kw">Quest 2</span>
         <span class="reminder">(<i class="ms ms-tap"></i>: This creature deals 2 damage to target opponent. Activate only as a sorcery.)</span>
-      </p>
-      <p>
-        <span class="pill">NO PLACE I&rsquo;D RATHER BE</span>At the beginning of your upkeep, if Lilo, Escape Artist is in your graveyard, you may pay <i class="ms ms-1 ms-cost"></i><i class="ms ms-w ms-cost"></i>. If you do, return her to the battlefield tapped.
       </p>
       <div class="flavor-divider"></div>
       <p class="flavor">&ldquo;You can&rsquo;t keep me away from the fun!&rdquo;</p>
